@@ -1,0 +1,2 @@
+This is a test file for Accessra.
+It should be downloaded with the name 'accessra_test_file.txt'.
