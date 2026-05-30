@@ -76,7 +76,7 @@ export async function POST(request) {
     const callbackUrl = `${baseUrl}/api/webhooks/paywave?ref=${reference}`;
 
     const authorization_url = buildPaywavePaymentUrl({
-      email,
+      customerEmail: email,  // Customer's email for receipt
       amount: breakdown.total,
       reference,
       phoneNumber: formattedPhone,

@@ -44,11 +44,32 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Withdrawal amount too small to cover transfer fees' }, { status: 400 });
     }
 
-    // 3. Initiate Payout via Paywave Express
-    console.log(`💸 Initiating Paywave Payout: KSh ${netPayout} (Original: ${amount}, Fee: ${transferFee}) to ${withdrawal.phoneNumber}`);
+    // 3. Fetch creator email from Firestore (required by OpenFloat API)
+    let creatorEmail = withdrawal.creatorEmail || null;
+    if (!creatorEmail && withdrawal.creatorUid) {
+      try {
+        const userSnap = await getDoc(doc(db, 'users', withdrawal.creatorUid));
+        if (userSnap.exists()) {
+          creatorEmail = userSnap.data().email || null;
+        }
+      } catch (emailErr) {
+        console.warn('Could not fetch creator email:', emailErr.message);
+      }
+    }
+
+    if (!creatorEmail) {
+      return NextResponse.json(
+        { error: 'Creator email not found. The OpenFloat payment API requires a registered email address. Please ensure the creator has a registered email in their profile.' },
+        { status: 400 }
+      );
+    }
+
+    // 4. Initiate Payout via Paywave Express
+    console.log(`💸 Initiating Paywave Payout: KSh ${netPayout} (Original: ${amount}, Fee: ${transferFee}) to ${withdrawal.phoneNumber} (${creatorEmail})`);
     const payoutResponse = await initiatePaywavePayout(
       netPayout,
       withdrawal.phoneNumber,
+      creatorEmail,
       `Lipapata Payout for ${withdrawal.creatorName || 'Creator'}`
     );
 
@@ -56,11 +77,12 @@ export async function POST(request) {
       return NextResponse.json({ error: payoutResponse.message || 'Paywave payout failed' }, { status: 400 });
     }
 
-    // 4. Update the withdrawal request status to 'processing'
+    // 5. Update the withdrawal request status to 'processing'
     await updateDoc(withdrawalRef, {
       status: 'processing',
       initiatedAt: serverTimestamp(),
-      paywavePayoutId: payoutResponse.data.id || null,
+      paywavePayoutId: payoutResponse.data?.id || null,
+      creatorEmailUsed: creatorEmail,
     });
 
     return NextResponse.json({

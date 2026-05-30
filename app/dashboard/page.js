@@ -511,9 +511,9 @@ export default function Dashboard() {
   return (
     <div className="dashboard-container">
       <header className="dash-header">
-        <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
+        <div className="header-left">
           <Link href="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <img src="/logo-v2.png" alt="Lipapata Logo" style={{ width: '100px', height: '100px', objectFit: 'contain', mixBlendMode: 'darken' }} />
+            <img src="/logo-v2.png" alt="Lipapata Logo" className="logo-img" />
           </Link>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <h1>{userData?.name ? `${userData.name}'s Dashboard` : userData?.email ? `${userData.email}'s Dashboard` : 'Creator Dashboard'}</h1>
@@ -535,14 +535,12 @@ export default function Dashboard() {
       </header>
 
       <section className="stats-grid">
-        <div className="stat-card-wrapper">
-          <StatCard 
-            title="Available Balance" 
-            value={`KSh ${(totalEarned - totalWithdrawn).toLocaleString()}`} 
-            icon={<Banknote color="#10b981" />} 
-          />
-          <button className="btn-withdraw" onClick={() => setIsWithdrawing(true)}>Withdraw</button>
-        </div>
+        <StatCard 
+          title="Available Balance" 
+          value={`KSh ${(totalEarned - totalWithdrawn).toLocaleString()}`} 
+          icon={<Banknote color="#10b981" />} 
+          action={<button className="btn-withdraw" onClick={() => setIsWithdrawing(true)}>Withdraw</button>}
+        />
         <StatCard title="Total Earned" value={`KSh ${totalEarned.toLocaleString()}`} icon={<CheckCircle2 opacity={0.5} />} />
         <StatCard title="Withdrawn" value={`KSh ${totalWithdrawn.toLocaleString()}`} icon={<ExternalLink size={20} opacity={0.5} />} />
       </section>
@@ -555,7 +553,7 @@ export default function Dashboard() {
       )}
 
       <section className="projects-section">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div className="section-header">
           <h2>Your Projects</h2>
         </div>
         {fetchError && (
@@ -626,7 +624,7 @@ export default function Dashboard() {
       </section>
 
       <section className="audience-section" style={{ marginTop: '4rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div className="section-header">
           <h2>Your Audience</h2>
           {audience.length > 0 && (
             <button className="btn-secondary" onClick={exportAudienceCSV}>
@@ -1000,6 +998,19 @@ export default function Dashboard() {
           margin-bottom: 3rem;
         }
 
+        .header-left {
+          display: flex;
+          align-items: center;
+          gap: 1.2rem;
+        }
+
+        .logo-img {
+          width: 100px;
+          height: 100px;
+          object-fit: contain;
+          mix-blend-mode: darken;
+        }
+
         .header-title {
           display: flex;
           align-items: center;
@@ -1043,25 +1054,17 @@ export default function Dashboard() {
           margin-bottom: 4rem;
         }
 
-        .stat-card-wrapper {
-          position: relative;
-          display: flex;
-          flex-direction: column;
-        }
-
         .btn-withdraw {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
           background: var(--primary);
           color: white;
           border: none;
-          padding: 0.4rem 0.8rem;
+          padding: 0.6rem 1.2rem;
           border-radius: 8px;
-          font-size: 0.8rem;
+          font-size: 0.85rem;
           font-weight: 700;
           cursor: pointer;
           transition: 0.3s;
+          white-space: nowrap;
         }
 
         .btn-withdraw:hover {
@@ -1332,39 +1335,204 @@ export default function Dashboard() {
           opacity: 0.7;
           line-height: 1.5;
         }
+
+        @media (max-width: 1024px) {
+          .dashboard-container { padding: 1.5rem 2rem; }
+          .stats-grid { gap: 1rem; }
+        }
+
+        .section-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 2rem;
+        }
+
+        @media (max-width: 768px) {
+          .dashboard-container { padding: 1rem; }
+          .dash-header { 
+            flex-direction: column; 
+            align-items: stretch; 
+            gap: 1rem; 
+            text-align: center;
+          }
+          .header-left { 
+            justify-content: center; 
+            flex-direction: column;
+            text-align: center;
+            gap: 1rem;
+          }
+          .logo-img {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto;
+          }
+          .header-left h1 {
+            font-size: 1.4rem;
+            word-break: break-word;
+          }
+          .header-left .btn-text {
+            margin: 0 auto;
+          }
+          .header-right { 
+            width: 100%; 
+            flex-direction: column-reverse;
+            gap: 0.75rem;
+          }
+          .header-right button {
+            width: 100%;
+            justify-content: center;
+          }
+          
+          .stats-grid { 
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+          }
+          .btn-withdraw {
+            width: 100%;
+            text-align: center;
+          }
+
+          .upload-modal {
+            width: 95%;
+            padding: 1.5rem;
+            max-height: 90vh;
+            overflow-y: auto;
+          }
+
+          .payouts-list, .audience-list {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          
+          .payout-table {
+            min-width: 520px;
+          }
+          
+          .section-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.75rem;
+          }
+
+          .section-header button {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .projects-section h2,
+          .payouts-section h2,
+          .audience-section h2,
+          .section-header h2 {
+            font-size: 1.4rem;
+          }
+
+          .payouts-section,
+          .audience-section {
+            margin-top: 2.5rem !important;
+          }
+
+          .pending-notice {
+            font-size: 0.88rem;
+            padding: 0.9rem 1rem;
+          }
+
+          .modal-actions {
+            flex-direction: column-reverse;
+            gap: 0.75rem;
+          }
+
+          .modal-actions button {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .upload-dropzone {
+            padding: 2rem 1rem;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .dashboard-container { padding: 0.75rem; }
+          .header-left h1 { font-size: 1.2rem; }
+          .payout-table { min-width: 420px; }
+        }
       `}</style>
     </div>
   );
 }
 
-function StatCard({ title, value, icon }) {
+function StatCard({ title, value, icon, action }) {
   return (
     <div className="glass-card stat-card">
-      <div className="stat-icon">{icon}</div>
-      <div className="stat-info">
-        <span>{title}</span>
-        <h3>{value}</h3>
+      <div className="stat-main">
+        <div className="stat-icon">{icon}</div>
+        <div className="stat-info">
+          <span>{title}</span>
+          <h3>{value}</h3>
+        </div>
       </div>
+      {action && <div className="stat-action">{action}</div>}
       <style jsx>{`
         .stat-card {
           display: flex;
+          justify-content: space-between;
           align-items: center;
           gap: 1.5rem;
           padding: 1.5rem;
+        }
+        .stat-main {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
         }
         .stat-icon {
           background: var(--primary-glow);
           color: var(--primary);
           padding: 1rem;
           border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
         }
         .stat-info span {
           font-size: 0.9rem;
           opacity: 0.6;
+          display: block;
         }
         .stat-info h3 {
           font-size: 1.8rem;
           font-weight: 800;
+          word-break: break-all;
+        }
+        .stat-action {
+          flex-shrink: 0;
+        }
+        @media (max-width: 1200px) {
+          .stat-card {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+          }
+          .stat-action {
+            width: 100%;
+          }
+        }
+        @media (max-width: 768px) {
+          .stat-card {
+            padding: 1.25rem;
+          }
+          .stat-main {
+            gap: 1rem;
+          }
+          .stat-icon {
+            padding: 0.8rem;
+          }
+          .stat-info h3 {
+            font-size: 1.5rem;
+          }
         }
       `}</style>
     </div>
@@ -1382,7 +1550,7 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
     <div className="glass-card project-row">
       <div className="row-main">
         <div className="row-type">{getTypeIcon()}</div>
-        <div>
+        <div className="row-title-container">
           <h4>{title}</h4>
           <span>
             {date}
@@ -1391,16 +1559,18 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
         </div>
       </div>
       <div className="row-meta">
-        <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontSize: '0.8rem', opacity: 0.7, marginRight: '1rem'}}>
+        <div className="project-stats">
           <span>{views || 0} Views</span>
           <span>{sales || 0} Sales ({views ? (((sales || 0)/views)*100).toFixed(1) : 0}%)</span>
         </div>
         <div className="row-price">{price}</div>
         <div className={`status-badge ${status.toLowerCase()}`}>{status}</div>
-        <button className="btn-icon" onClick={() => onAddDiscount({id, title})} title="Add Discount"><Tag size={18} /></button>
-        <button className="btn-icon" onClick={() => {
-          if (id) navigator.clipboard.writeText(`${window.location.origin}/p/${id}`);
-        }}><Share2 size={18} /></button>
+        <div className="row-actions">
+          <button className="btn-icon" onClick={() => onAddDiscount({id, title})} title="Add Discount"><Tag size={18} /></button>
+          <button className="btn-icon" onClick={() => {
+            if (id) navigator.clipboard.writeText(`${window.location.origin}/p/${id}`);
+          }}><Share2 size={18} /></button>
+        </div>
       </div>
       <style jsx>{`
         .project-row {
@@ -1419,12 +1589,17 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
           color: var(--primary);
           padding: 0.5rem;
           border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
         }
-        .row-main h4 {
+        .row-title-container h4 {
           font-size: 1.1rem;
           margin-bottom: 0.2rem;
+          word-break: break-word;
         }
-        .row-main span {
+        .row-title-container span {
           font-size: 0.85rem;
           opacity: 0.5;
         }
@@ -1433,14 +1608,26 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
           align-items: center;
           gap: 2rem;
         }
+        .project-stats {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          font-size: 0.8rem;
+          opacity: 0.7;
+          margin-right: 1rem;
+          white-space: nowrap;
+        }
         .row-price {
           font-weight: 700;
+          white-space: nowrap;
         }
         .status-badge {
           padding: 0.4rem 0.8rem;
           border-radius: 6px;
           font-size: 0.8rem;
           font-weight: 600;
+          text-transform: capitalize;
+          white-space: nowrap;
         }
         .status-badge.paid {
           background: rgba(39, 245, 187, 0.2);
@@ -1454,6 +1641,11 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
           background: rgba(39, 245, 187, 0.2);
           color: var(--primary);
         }
+        .row-actions {
+          display: flex;
+          gap: 1rem;
+          align-items: center;
+        }
         .btn-icon {
           background: transparent;
           border: none;
@@ -1461,96 +1653,58 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
           cursor: pointer;
           opacity: 0.5;
           transition: opacity 0.3s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.25rem;
         }
         .btn-icon:hover {
           opacity: 1;
           color: var(--primary);
         }
+        
         @media (max-width: 1024px) {
-          .dashboard-container { padding: 1.5rem 2rem; }
-          .stats-grid { gap: 1rem; }
+          .row-meta {
+            gap: 1rem;
+          }
         }
-
+        
         @media (max-width: 768px) {
-          .dashboard-container { padding: 1rem; }
-          .dash-header { 
-            flex-direction: column; 
-            align-items: stretch; 
-            gap: 1rem; 
-            text-align: center;
-          }
-          .header-left { 
-            justify-content: center; 
+          .project-row {
             flex-direction: column;
-            text-align: center;
-          }
-          .header-left img {
-            width: 80px !important;
-            height: 80px !important;
-          }
-          .header-left h1 {
-            font-size: 1.5rem;
-          }
-          .header-left .btn-text {
-            margin: 0 auto;
-          }
-          .header-right { 
-            width: 100%; 
-            flex-direction: column-reverse;
+            align-items: stretch;
+            padding: 1.25rem;
             gap: 1rem;
           }
-          .header-right button {
-            width: 100%;
-            justify-content: center;
-          }
-          
-          .stats-grid { grid-template-columns: 1fr; }
-          .stat-card-wrapper { width: 100%; }
-          
           .row-main {
-            flex-direction: column;
-            text-align: center;
-            align-items: center;
+            text-align: left;
+            align-items: flex-start;
           }
-          
-          .row-meta { 
-            width: 100%; 
-            justify-content: space-between; 
-            margin-top: 1rem;
+          .row-meta {
+            flex-direction: column;
+            align-items: stretch;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
             padding-top: 1rem;
-            border-top: 1px solid rgba(0,0,0,0.05);
-            flex-wrap: wrap;
             gap: 1rem;
           }
-          
-          .project-row { 
-            flex-direction: column; 
-            align-items: center; 
-            padding: 1.2rem;
+          .project-stats {
+            align-items: flex-start;
+            margin-right: 0;
+            flex-direction: row;
+            gap: 1rem;
           }
-
-          .upload-modal {
-            width: 95%;
-            padding: 1.5rem;
-            max-height: 90vh;
-            overflow-y: auto;
+          .row-price {
+            font-size: 1.1rem;
           }
-
-          .payouts-list, .audience-list {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
+          .status-badge {
+            align-self: flex-start;
           }
-          
-          .payout-table {
-            min-width: 600px;
-          }
-          
-          .projects-section h2, .payouts-section h2, .audience-section h2 {
-            font-size: 1.5rem;
-            text-align: center;
+          .row-actions {
+            justify-content: flex-start;
           }
         }
       `}</style>
     </div>
   );
 }
+
