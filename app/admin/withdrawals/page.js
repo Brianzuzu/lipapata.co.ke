@@ -186,6 +186,12 @@ export default function AdminWithdrawals() {
         .action-btns { display: flex; gap: 0.8rem; }
         .btn-approve { background: #10b981; color: black; border: none; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
         .btn-reject { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+        
+        @media (max-width: 768px) {
+          .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .admin-table { min-width: 800px; }
+          .page-header { text-align: center; }
+        }
       `}</style>
     </div>
   );

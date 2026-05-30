@@ -195,6 +195,15 @@ export default function AdminTransactions() {
         .action-btn.success:hover { color: #16A34A; border-color: #16A34A; background: #F0FDF4; }
 
         .empty-state { text-align: center; padding: 5rem; color: #94a3b8; font-style: italic; }
+
+        @media (max-width: 768px) {
+          .page-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .header-actions { width: 100%; flex-direction: column; align-items: stretch; gap: 1rem; }
+          .filter-pills { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 0.5rem; }
+          .pill { white-space: nowrap; }
+          .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .admin-table { min-width: 800px; }
+        }
       `}</style>
     </div>
   );

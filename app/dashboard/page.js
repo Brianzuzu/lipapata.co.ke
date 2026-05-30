@@ -48,9 +48,8 @@ export default function Dashboard() {
   const [profileData, setProfileData] = useState({
     bio: '',
     website: '',
-    twitter: '',
-    instagram: '',
-    coverPhotoUrl: ''
+    tiktok: '',
+    instagram: ''
   });
 
   const userPlan = 'FREE'; // Will be dynamic later
@@ -146,9 +145,8 @@ export default function Dashboard() {
             ...prev,
             bio: data.bio || '',
             website: data.website || '',
-            twitter: data.twitter || '',
-            instagram: data.instagram || '',
-            coverPhotoUrl: data.coverPhotoUrl || ''
+            tiktok: data.tiktok || '',
+            instagram: data.instagram || ''
           }));
         }
       });
@@ -218,7 +216,7 @@ export default function Dashboard() {
   };
 
   const handleUpload = async () => {
-    console.log('🚀 handleUpload triggered', { filesCount: files.length, title, price, user: !!user });
+    console.log('🚀 handleUpload triggered (direct upload)', { filesCount: files.length, title, price, user: !!user });
     
     if (files.length === 0 || !title || !price) {
       console.warn('⚠️ Validation failed', { filesCount: files.length, title, price });
@@ -233,44 +231,86 @@ export default function Dashboard() {
     let uploadedFilesData = [];
 
     try {
-      // 1. Upload to Cloudinary via our API route
+      // 1. Fetch secure direct upload credentials and signature
+      console.log("🔐 Requesting secure Cloudinary upload signature...");
+      const signRes = await fetch('/api/upload/sign', {
+        method: 'POST',
+      });
+      if (!signRes.ok) {
+        throw new Error("Failed to authenticate with upload server.");
+      }
+      const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
+
+      // 2. Upload files directly to Cloudinary
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+
+        // Determine Cloudinary resource type
+        const mimeType = file.type || '';
+        const isVideo = mimeType.startsWith('video/');
+        const isAudio = mimeType.startsWith('audio/');
+        const isImage = mimeType.startsWith('image/');
+        const resourceType = (isVideo || isAudio) ? 'video' : isImage ? 'image' : 'raw';
+
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('plan', userPlan);
-        formData.append('creatorName', userData?.name || 'Creator');
+        formData.append('api_key', apiKey);
+        formData.append('timestamp', timestamp);
+        formData.append('signature', signature);
+        formData.append('folder', folder);
 
-        console.log(`📤 Sending file ${i + 1} of ${files.length} to API...`);
+        console.log(`📤 Uploading file ${i + 1} of ${files.length} directly to Cloudinary...`);
         setUploadProgress(10 + Math.floor((i / files.length) * 60));
 
-        const uploadRes = await fetch('/api/upload', {
+        const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
+        const uploadRes = await fetch(cloudinaryUrl, {
           method: 'POST',
           body: formData,
         });
 
         if (!uploadRes.ok) {
           const errData = await uploadRes.json();
-          throw new Error(errData.error || `Upload failed for ${file.name}`);
+          throw new Error(errData.error?.message || `Direct upload failed for ${file.name}`);
         }
 
         const cloudData = await uploadRes.json();
-        console.log(`✅ Cloudinary success for ${file.name}`, cloudData);
+        console.log(`✅ Cloudinary direct upload success for ${file.name}`, cloudData);
+
+        // 3. Generate watermark preview URLs for media types
+        let previewUrl = '';
+        if (isImage || isVideo || isAudio) {
+          console.log(`🔄 Generating preview watermark for ${file.name}...`);
+          const previewRes = await fetch('/api/upload/preview', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              publicId: cloudData.public_id,
+              resourceType: isAudio ? 'audio' : cloudData.resource_type,
+              creatorName: userData?.name || 'Creator',
+            }),
+          });
+          if (previewRes.ok) {
+            const previewData = await previewRes.json();
+            previewUrl = previewData.previewUrl;
+          }
+        }
         
         uploadedFilesData.push({
-          originalUrl: cloudData?.original?.url || '',
-          originalPublicId: cloudData?.original?.publicId || '',
-          previewUrl: cloudData?.preview?.url || '',
-          resourceType: cloudData?.original?.resourceType || 'raw',
-          format: cloudData?.original?.format || 'unknown',
-          fileSize: cloudData?.original?.bytes || 0,
-          fileName: file?.name || 'file'
+          originalUrl: cloudData.secure_url || '',
+          originalPublicId: cloudData.public_id || '',
+          previewUrl: previewUrl || '',
+          resourceType: isAudio ? 'audio' : cloudData.resource_type || 'raw',
+          format: cloudData.format || 'unknown',
+          fileSize: cloudData.bytes || 0,
+          fileName: file.name || 'file'
         });
       }
 
       setUploadProgress(85);
 
-      // 2. Save project metadata to Firestore
+      // 4. Save project metadata to Firestore
       const mainFile = uploadedFilesData[0] || {};
       const docRef = await addDoc(collection(db, 'projects'), {
         uid: user?.uid || 'guest-user',
@@ -297,10 +337,10 @@ export default function Dashboard() {
       setUploadProgress(100);
       console.log('🎉 Firestore success', docRef.id);
 
-      // 3. Refresh project list
+      // 5. Refresh project list
       if (user?.uid) fetchProjects(user.uid);
 
-      // 4. Generate shareable link
+      // 6. Generate shareable link
       const link = `${window.location.origin}/p/${docRef.id}`;
       setGeneratedLink(link);
       setIsProcessing(false);
@@ -721,23 +761,19 @@ export default function Dashboard() {
                   {price && parseFloat(price) > 0 && (
                     <div className="commission-preview">
                       <div className="commission-row">
-                        <span>Platform Commission (3.5%)</span>
+                        <span>Platform Commission (3%)</span>
                         <span>- KSh {calculateCommission(parseFloat(price), userPlan).platformFee.toLocaleString()}</span>
-                      </div>
-                      <div className="commission-row">
-                        <span>Payment Gateway (1.5%)</span>
-                        <span>- KSh {calculateCommission(parseFloat(price), userPlan).paymentGatewayFee.toLocaleString()}</span>
                       </div>
                       <div className="commission-row">
                         <span>M-Pesa Withdrawal Fee</span>
                         <span>- KSh {calculateCommission(parseFloat(price), userPlan).transferFee.toLocaleString()}</span>
                       </div>
                       <div className="commission-row earnings">
-                        <span>You will receive (Net)</span>
+                        <span>You Receive (Net)</span>
                         <span>KSh {calculateCommission(parseFloat(price), userPlan).creatorEarnings.toLocaleString()}</span>
                       </div>
                       <p style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.8rem', fontStyle: 'italic' }}>
-                        *Withdrawal fee is based on standard tiered rates.
+                        *M-Pesa fee based on official Safaricom 2025 withdrawal tiers.
                       </p>
                     </div>
                   )}
@@ -910,16 +946,6 @@ export default function Dashboard() {
               </div>
 
               <div className="input-group">
-                <label>Cover Photo URL</label>
-                <input 
-                  type="url" 
-                  placeholder="https://..." 
-                  value={profileData.coverPhotoUrl}
-                  onChange={(e) => setProfileData({...profileData, coverPhotoUrl: e.target.value})}
-                />
-              </div>
-
-              <div className="input-group">
                 <label>Website URL</label>
                 <input 
                   type="url" 
@@ -930,12 +956,12 @@ export default function Dashboard() {
               </div>
 
               <div className="input-group">
-                <label>Twitter/X Profile URL</label>
+                <label>TikTok Profile URL</label>
                 <input 
                   type="url" 
-                  placeholder="https://x.com/..." 
-                  value={profileData.twitter}
-                  onChange={(e) => setProfileData({...profileData, twitter: e.target.value})}
+                  placeholder="https://tiktok.com/@..." 
+                  value={profileData.tiktok}
+                  onChange={(e) => setProfileData({...profileData, tiktok: e.target.value})}
                 />
               </div>
 
@@ -1453,17 +1479,39 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
             gap: 1rem; 
             text-align: center;
           }
-          .header-left { justify-content: center; }
+          .header-left { 
+            justify-content: center; 
+            flex-direction: column;
+            text-align: center;
+          }
+          .header-left img {
+            width: 80px !important;
+            height: 80px !important;
+          }
+          .header-left h1 {
+            font-size: 1.5rem;
+          }
+          .header-left .btn-text {
+            margin: 0 auto;
+          }
           .header-right { 
             width: 100%; 
             flex-direction: column-reverse;
             gap: 1rem;
           }
-          .upload-counter { width: 100%; text-align: center; }
-          .btn-primary { width: 100%; justify-content: center; }
+          .header-right button {
+            width: 100%;
+            justify-content: center;
+          }
           
           .stats-grid { grid-template-columns: 1fr; }
           .stat-card-wrapper { width: 100%; }
+          
+          .row-main {
+            flex-direction: column;
+            text-align: center;
+            align-items: center;
+          }
           
           .row-meta { 
             width: 100%; 
@@ -1471,11 +1519,13 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
             margin-top: 1rem;
             padding-top: 1rem;
             border-top: 1px solid rgba(0,0,0,0.05);
+            flex-wrap: wrap;
+            gap: 1rem;
           }
           
           .project-row { 
             flex-direction: column; 
-            align-items: flex-start; 
+            align-items: center; 
             padding: 1.2rem;
           }
 
@@ -1484,6 +1534,20 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
             padding: 1.5rem;
             max-height: 90vh;
             overflow-y: auto;
+          }
+
+          .payouts-list, .audience-list {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          
+          .payout-table {
+            min-width: 600px;
+          }
+          
+          .projects-section h2, .payouts-section h2, .audience-section h2 {
+            font-size: 1.5rem;
+            text-align: center;
           }
         }
       `}</style>

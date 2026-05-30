@@ -620,17 +620,19 @@ export default function ProjectPreview({ params }) {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @media (max-width: 900px) {
           .preview-grid { grid-template-columns: 1fr; }
-          .preview-visual { height: 400px; }
-          .preview-info { padding: 2rem; }
+          .preview-visual { height: 400px; border-radius: 16px; }
+          .preview-info { padding: 2rem; border-radius: 16px; }
         }
 
         @media (max-width: 600px) {
           .preview-container { padding: 1rem; }
-          .preview-nav { margin-bottom: 2rem; }
-          .nav-badges { display: none; }
-          .logo { font-size: 1.2rem; }
-          .preview-visual { height: 300px; }
-          .price-amount { font-size: 1.5rem; }
+          .preview-nav { margin-bottom: 1.5rem; flex-direction: column; gap: 1rem; }
+          .nav-badges { display: flex; flex-wrap: wrap; justify-content: center; }
+          .logo { font-size: 1.4rem; }
+          .preview-visual { height: 280px; }
+          .price-amount { font-size: 1.8rem; }
+          .btn-unlock { padding: 1rem; font-size: 1rem; }
+          .info-header h1 { font-size: 1.5rem; }
         }
       `}</style>
     </div>

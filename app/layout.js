@@ -8,6 +8,12 @@ export const metadata = {
   description: 'The premium platform for creators to securely share assets, manage payments, and ensure instant delivery once paid.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

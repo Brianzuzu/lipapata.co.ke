@@ -204,6 +204,14 @@ export default function AdminUsers() {
         .action-btn.unsuspend { color: #16A34A; border-color: #BBF7D0; background: #F0FDF4; }
 
         .row-suspended { background: #FBFBFA; opacity: 0.7; }
+
+        @media (max-width: 768px) {
+          .page-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .header-actions { width: 100%; flex-direction: column; align-items: stretch; gap: 1rem; }
+          .search-bar { width: 100%; }
+          .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .admin-table { min-width: 800px; }
+        }
       `}</style>
     </div>
   );

@@ -219,6 +219,14 @@ export default function AdminProjects() {
         .action-btn.delete:hover { color: #EF4444; border-color: #EF4444; background: #FEF2F2; }
 
         .empty-state { text-align: center; padding: 5rem; color: #94a3b8; font-style: italic; }
+
+        @media (max-width: 768px) {
+          .page-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .header-actions { width: 100%; flex-direction: column; align-items: stretch; gap: 1rem; }
+          .search-bar { width: 100%; }
+          .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .admin-table { min-width: 800px; }
+        }
       `}</style>
     </div>
   );

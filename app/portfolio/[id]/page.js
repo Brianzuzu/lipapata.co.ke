@@ -6,9 +6,9 @@ import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebas
 import Link from 'next/link';
 import { Loader2, ArrowRight, Globe, Image, Film, FileText, Share2 } from 'lucide-react';
 
-const TwitterIcon = ({ size = 18 }) => (
+const TikTokIcon = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"></path>
+    <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"></path>
   </svg>
 );
 
@@ -70,16 +70,6 @@ export default function CreatorPortfolio({ params }) {
 
   return (
     <div className="portfolio-container">
-      {/* Cover Photo */}
-      <div 
-        className="cover-photo" 
-        style={{ 
-          backgroundImage: `url(${creator.coverPhotoUrl || 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&q=80&w=2000'})` 
-        }}
-      >
-        <div className="cover-overlay"></div>
-      </div>
-
       <div className="portfolio-content">
         {/* Profile Info */}
         <div className="profile-section glass-card">
@@ -99,9 +89,9 @@ export default function CreatorPortfolio({ params }) {
                   <Globe size={18} /> Website
                 </a>
               )}
-              {creator.twitter && (
-                <a href={creator.twitter} target="_blank" rel="noreferrer" className="social-btn">
-                  <TwitterIcon size={18} /> Twitter
+              {creator.tiktok && (
+                <a href={creator.tiktok} target="_blank" rel="noreferrer" className="social-btn">
+                  <TikTokIcon size={18} /> TikTok
                 </a>
               )}
               {creator.instagram && (
@@ -155,22 +145,9 @@ export default function CreatorPortfolio({ params }) {
           background: var(--background);
         }
         
-        .cover-photo {
-          height: 350px;
-          background-size: cover;
-          background-position: center;
-          position: relative;
-        }
-        
-        .cover-overlay {
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(to bottom, rgba(0,0,0,0.1), var(--background));
-        }
-        
         .portfolio-content {
           max-width: 1000px;
-          margin: -100px auto 0;
+          margin: 4rem auto 0;
           padding: 0 2rem 4rem;
           position: relative;
           z-index: 10;
@@ -320,13 +297,18 @@ export default function CreatorPortfolio({ params }) {
             flex-direction: column;
             text-align: center;
             gap: 1.5rem;
-            padding: 2rem;
+            padding: 1.5rem;
           }
           
           .social-links {
             justify-content: center;
             flex-wrap: wrap;
           }
+
+          .profile-pic { width: 120px; height: 120px; margin: 0 auto; }
+          .profile-details h1 { font-size: 2rem; }
+          .portfolio-content { margin-top: 2rem; padding: 0 1rem 2rem; }
+          .projects-grid { grid-template-columns: 1fr; }
         }
       `}</style>
     </div>

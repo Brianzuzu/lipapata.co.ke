@@ -222,6 +222,21 @@ export default function AdminDashboard() {
 
         .empty-state { text-align: center; padding: 4rem; color: #94a3b8; font-style: italic; }
 
+        @media (max-width: 1024px) {
+          .stats-grid { grid-template-columns: repeat(2, 1fr); }
+          .dashboard-body { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+          .content-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .header-actions { width: 100%; flex-direction: column; align-items: stretch; }
+          .search-bar { width: 100%; }
+          .search-bar input { width: 100%; }
+          .stats-grid { grid-template-columns: 1fr; gap: 1rem; }
+          .table-wrapper { overflow-x: auto; }
+          .admin-table { min-width: 700px; }
+        }
+
       `}</style>
     </div>
   );

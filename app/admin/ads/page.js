@@ -417,6 +417,13 @@ export default function AdminAds() {
         
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+        
+        @media (max-width: 768px) {
+          .ads-grid { grid-template-columns: 1fr; }
+          .page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; text-align: center; }
+          .header-actions { width: 100%; flex-direction: column; align-items: stretch; }
+          .limit-indicator { flex-direction: column; align-items: center; text-align: center; }
+        }
       `}</style>
     </div>
   );

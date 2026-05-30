@@ -22,7 +22,7 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
   const transactionData = transactionDoc.data();
 
   // Prevent double processing
-  if (transactionData.status === 'completed') return { ok: true, message: 'Already completed' };
+  if (transactionData.status === 'completed') return { ok: true, message: 'Already completed', projectId: transactionData.projectId };
 
   const isSuccess = !status || status === 'success' || status === 'successful' || status === 'completed';
 
@@ -43,38 +43,40 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
       });
     }
 
-    return { ok: true, message: 'Transaction completed' };
+    return { ok: true, message: 'Transaction completed', projectId: transactionData.projectId };
   } else {
     await updateDoc(doc(db, 'transactions', transactionDoc.id), {
       status: 'failed',
       failureReason: status || 'Payment failed',
     });
-    return { ok: false, message: 'Payment failed' };
+    return { ok: false, message: 'Payment failed', projectId: transactionData.projectId };
   }
 }
 
 // GET: Paywave redirects the browser here after payment
 export async function GET(request) {
+  let projectId = '';
   try {
     const { searchParams } = new URL(request.url);
     const reference = searchParams.get('ref') || searchParams.get('reference');
     const status    = searchParams.get('status');
     const txId      = searchParams.get('transaction_id') || searchParams.get('txid');
 
-    await handlePaywaveConfirmation(reference, status, txId);
+    const result = await handlePaywaveConfirmation(reference, status, txId);
+    projectId = result.projectId || '';
 
     // Redirect customer to their download/success page
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const isSuccess = !status || status === 'success' || status === 'successful' || status === 'completed';
     const redirectUrl = isSuccess
       ? `${baseUrl}/api/download?ref=${reference}`
-      : `${baseUrl}/p?error=payment_failed`;
+      : `${baseUrl}/p/${projectId}?error=payment_failed`;
 
     return NextResponse.redirect(redirectUrl);
   } catch (error) {
     console.error('Paywave GET Webhook Error:', error);
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    return NextResponse.redirect(`${baseUrl}/p?error=server_error`);
+    return NextResponse.redirect(projectId ? `${baseUrl}/p/${projectId}?error=server_error` : `${baseUrl}/login`);
   }
 }
 

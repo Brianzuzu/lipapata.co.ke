@@ -9,8 +9,7 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
-    globalCommission: 5,
-    mpesaCharge: 0,
+    globalCommission: 3,
     minWithdrawal: 500,
     maintenanceMode: false
   });
@@ -24,7 +23,14 @@ export default function AdminSettings() {
     try {
       const docSnap = await getDoc(doc(db, 'settings', 'global'));
       if (docSnap.exists()) {
-        setSettings(docSnap.data());
+        const data = docSnap.data();
+        // Firestore stores as decimal (e.g. 0.03). Convert to % for display.
+        setSettings({
+          ...data,
+          globalCommission: data.globalCommission !== undefined
+            ? (data.globalCommission < 1 ? data.globalCommission * 100 : data.globalCommission)
+            : 3,
+        });
       }
     } catch (err) {
       console.error(err);
@@ -38,11 +44,13 @@ export default function AdminSettings() {
     setSaving(true);
     setMessage(null);
     try {
+      // Store commission as decimal (e.g. 3% → 0.03) so commission.js reads it correctly
       await setDoc(doc(db, 'settings', 'global'), {
         ...settings,
+        globalCommission: parseFloat(settings.globalCommission) / 100,
         updatedAt: serverTimestamp()
       });
-      setMessage({ type: 'success', text: 'Settings updated successfully!' });
+      setMessage({ type: 'success', text: 'Settings saved! Commission is now ' + settings.globalCommission + '%.' });
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to update settings.' });
     } finally {
@@ -162,6 +170,13 @@ export default function AdminSettings() {
         
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+          .settings-grid { grid-template-columns: 1fr; }
+          .settings-form { padding: 1.5rem; }
+          .page-header { text-align: center; }
+          .toggle-group { flex-direction: column; align-items: flex-start; gap: 1rem; }
+        }
       `}</style>
     </div>
   );
