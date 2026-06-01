@@ -68,7 +68,7 @@ export async function GET(request) {
     phone: phoneNumber || '',
     reference: reference,
     desc: description || 'Lipapata Digital Content',
-    callback: callbackUrl || '',
+    callback: callbackUrl || ''
   });
 
   const redirectUrl = `${PAYWAVE_PAYMENT_URL}?${params.toString()}`;
