@@ -266,6 +266,11 @@ useEffect(() => {
                   localStorage.setItem(`paid_${project?.id}`, 'true');
                 }
                 setToast({ message: "Payment confirmed successfully!", type: "success" });
+                // Close the Paywave window if it's still open
+                if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
+                  paymentWindowRef.current.close();
+                  paymentWindowRef.current = null;
+                }
                 return true; // Stop polling
               } else if (transData.status === 'failed') {
                 setError(`Payment failed: ${transData.failureReason || 'Unknown error'}`);
