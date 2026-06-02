@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import Link from 'next/link';
+import { auth } from '../../../lib/firebase';
 import { Loader2, ArrowRight, Globe, Image, Film, FileText, Share2 } from 'lucide-react';
 
 const TikTokIcon = ({ size = 18 }) => (
@@ -25,10 +25,14 @@ export default function CreatorPortfolio({ params }) {
   const [creator, setCreator] = useState(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [customPrice, setCustomPrice] = useState('');
 
   useEffect(() => {
     const fetchPortfolio = async () => {
       try {
+        const storedCustomPrice = typeof window !== 'undefined' ? localStorage.getItem('custom_price') : '';
+        if (storedCustomPrice) setCustomPrice(storedCustomPrice);
+        
         const creatorDoc = await getDoc(doc(db, 'users', id));
         if (creatorDoc.exists()) {
           setCreator(creatorDoc.data());
@@ -70,6 +74,9 @@ export default function CreatorPortfolio({ params }) {
 
   return (
     <div className="portfolio-container">
+      <nav className="portfolio-nav">
+        <button className="nav-logout" onClick={() => auth.signOut()}>Logout</button>
+      </nav>
       <div className="portfolio-content">
         {/* Profile Info */}
         <div className="profile-section glass-card">
@@ -111,7 +118,11 @@ export default function CreatorPortfolio({ params }) {
               projects.map(p => (
                 <Link href={`/p/${p.id}`} key={p.id} className="project-card glass-card">
                   <div className="project-type-icon">
-                    {p.resourceType === 'video' ? <Film size={20} /> : p.resourceType === 'image' ? <Image size={20} /> : <FileText size={20} />}
+                {p.previewUrl ? (
+                  <img src={p.previewUrl} alt={p.title} className="project-thumb" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '12px' }} />
+                ) : (
+                  p.resourceType === 'video' ? <Film size={20} /> : p.resourceType === 'image' ? <Image size={20} /> : <FileText size={20} />
+                )}
                   </div>
                   <h3>{p.title || p.fileName}</h3>
                   <div className="project-meta">
