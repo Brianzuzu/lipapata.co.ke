@@ -191,8 +191,62 @@ export default function Home() {
           />
         </div>
       </section>
-
+<section id="how-it-works" className="how-it-works">
+  <h2>How It Works</h2>
+  <div className="steps">
+    <div className="step">
+      <Upload className="icon-primary" size={48} />
+      <h3>Upload Your Assets</h3>
+      <p>Drag and drop your files to securely store them.</p>
+    </div>
+    <div className="step">
+      <CreditCard className="icon-primary" size={48} />
+      <h3>Receive Payments</h3>
+      <p>Clients pay via M‑Pay or cards, instantly transferred to you.</p>
+    </div>
+    <div className="step">
+      <ChevronRight className="icon-primary" size={48} />
+      <h3>Deliver &amp; Earn</h3>
+      <p>After payment, the download link unlocks and you get paid.</p>
+    </div>
+  </div>
+</section>
       <style jsx>{`
+        .how-it-works {
+          padding: 4rem 0;
+          text-align: center;
+        }
+        .how-it-works h2 {
+          font-size: 2.8rem;
+          margin-bottom: 2rem;
+          font-weight: 900;
+          background: linear-gradient(to right, var(--primary), #000);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        .steps {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 2rem;
+        }
+        .step {
+          background: rgba(255,255,255,0.7);
+          backdrop-filter: blur(8px);
+          padding: 2rem;
+          border-radius: 16px;
+          box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+          transition: transform 0.3s ease;
+        }
+        .step:hover { transform: translateY(-8px); }
+        .step h3 { margin-top: 1rem; font-size: 1.4rem; }
+        .step p { margin-top: 0.5rem; color: #475569; }
+        @media (max-width: 1024px) {
+          .steps { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 600px) {
+          .steps { grid-template-columns: 1fr; }
+        }
+
         .container {
           max-width: 1200px;
           margin: 0 auto;

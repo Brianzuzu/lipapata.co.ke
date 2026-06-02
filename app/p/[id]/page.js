@@ -1,13 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Lock, CheckCircle, Shield, Globe, ExternalLink, ArrowRight, Loader2, Info, Music, FileText, Archive } from 'lucide-react';
+import { Download, Lock, CheckCircle, Shield, Globe, ExternalLink, ArrowRight, Loader2, Info, Music, FileText, Archive, X } from 'lucide-react';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { calculateCommission } from '../../../lib/commission';
 import { getGlobalSettings } from '../../../lib/settings';
 import Link from 'next/link';
+
+const Toast = ({ message, type, onClose }) => (
+  <motion.div 
+    initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+    className={`toast ${type}`}
+    style={{ position: 'fixed', bottom: '2rem', right: '2rem', padding: '1rem 1.5rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.5rem', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+  >
+    {message}
+    <button onClick={onClose}><X size={16} /></button>
+  </motion.div>
+);
 
 export default function ProjectPreview({ params }) {
   const [isPaid, setIsPaid] = useState(false);
@@ -23,12 +34,14 @@ export default function ProjectPreview({ params }) {
   const [previewStarted, setPreviewStarted] = useState(false);
   const [globalSettings, setGlobalSettings] = useState(null);
   const [transactionId, setTransactionId] = useState(null);
+const paymentWindowRef = useRef(null);
   const [email, setEmail] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [discountCode, setDiscountCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(null);
   const [discountError, setDiscountError] = useState('');
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
+  const [toast, setToast] = useState(null);
 
 
   useEffect(() => {
@@ -118,6 +131,23 @@ export default function ProjectPreview({ params }) {
     }
   }, [project, globalSettings, customPrice, appliedDiscount]);
 
+// Listen for Paywave payment success messages
+useEffect(() => {
+  const handleMessage = (event) => {
+    if (event.data?.type === 'PAYWAVE_SUCCESS') {
+      setIsPaid(true);
+      setIsPaying(false);
+      setToast({ message: "Payment confirmed successfully!", type: "success" });
+      // Close the Paywave popup if still open
+      if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
+        paymentWindowRef.current.close();
+      }
+    }
+  };
+  window.addEventListener('message', handleMessage);
+  return () => window.removeEventListener('message', handleMessage);
+}, []);
+
   useEffect(() => {
     if (project?.uid) {
       const fetchOtherWork = async () => {
@@ -164,9 +194,10 @@ export default function ProjectPreview({ params }) {
         throw new Error(data.error || 'Payment failed');
       }
 
-      // Open Paystack checkout in a new window
+      // Open Paywave checkout in a new window and keep a reference
       if (data.authorization_url) {
-        window.open(data.authorization_url, '_blank');
+        const pwWindow = window.open(data.authorization_url, '_blank');
+        paymentWindowRef.current = pwWindow;
       }
 
       setTransactionId(data.transactionId);
@@ -181,9 +212,11 @@ export default function ProjectPreview({ params }) {
               if (transData.status === 'completed') {
                 setIsPaid(true);
                 setIsPaying(false);
+                setToast({ message: "Payment confirmed successfully!", type: "success" });
                 return true; // Stop polling
               } else if (transData.status === 'failed') {
                 setError(`Payment failed: ${transData.failureReason || 'Unknown error'}`);
+                setToast({ message: "Payment failed. Please try again.", type: "error" });
                 setIsPaying(false);
                 return true; // Stop polling
               }
@@ -205,6 +238,7 @@ export default function ProjectPreview({ params }) {
           clearInterval(interval);
           if (!isPaid && isPaying) {
             setError("Payment confirmation timed out. If you've paid, please refresh the page.");
+            setToast({ message: "Payment timed out.", type: "error" });
             setIsPaying(false);
           }
         }, 120000);
@@ -215,6 +249,7 @@ export default function ProjectPreview({ params }) {
     } catch (err) {
       console.error('Payment error:', err);
       setError(err.message);
+      setToast({ message: err.message, type: "error" });
       setIsPaying(false);
     }
   };
@@ -266,6 +301,7 @@ export default function ProjectPreview({ params }) {
 
   return (
     <div className="preview-container">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <nav className="preview-nav">
         <Link href="/" className="logo-container" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', textDecoration: 'none' }}>
           <img src="/logo-v2.png" alt="Lipapata Logo" style={{ width: '80px', height: '80px', objectFit: 'contain', mixBlendMode: 'darken' }} />
