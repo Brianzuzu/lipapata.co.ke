@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Lock, CheckCircle, Shield, Globe, ExternalLink, ArrowRight, Loader2, Info, Music, FileText, Archive, X } from 'lucide-react';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
@@ -36,6 +37,7 @@ export default function ProjectPreview({ params }) {
   const [transactionId, setTransactionId] = useState(null);
 const paymentWindowRef = useRef(null);
   const [email, setEmail] = useState('');
+  const router = useRouter();
   const [customPrice, setCustomPrice] = useState('');
   const [discountCode, setDiscountCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(null);
@@ -45,6 +47,11 @@ const paymentWindowRef = useRef(null);
 
 
   useEffect(() => {
+    // Auto-fill phone number from localStorage if available
+    const storedPhone = typeof window !== 'undefined' ? localStorage.getItem('user_phone') : '';
+if (storedPhone) setPhoneNumber(storedPhone);
+const storedEmail = typeof window !== 'undefined' ? localStorage.getItem('user_email') : '';
+if (storedEmail) setEmail(storedEmail);
     const fetchProject = async () => {
       const timeout = setTimeout(() => {
         if (loading) {
@@ -70,6 +77,10 @@ const paymentWindowRef = useRef(null);
           }
           const data = await response.json();
           setProject(data);
+if (typeof window !== 'undefined') {
+  const paidFlag = localStorage.getItem(`paid_${data.id}`);
+  if (paidFlag === 'true') setIsPaid(true);
+}
         }
       } catch (err) {
         console.error("Error fetching project:", err);
@@ -137,16 +148,21 @@ useEffect(() => {
     if (event.data?.type === 'PAYWAVE_SUCCESS') {
       setIsPaid(true);
       setIsPaying(false);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`paid_${project?.id}`, 'true');
+      }
       setToast({ message: "Payment confirmed successfully!", type: "success" });
       // Close the Paywave popup if still open
       if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
         paymentWindowRef.current.close();
       }
+      // Refresh the page to reflect unlocked content
+      router.replace(router.asPath);
     }
   };
   window.addEventListener('message', handleMessage);
   return () => window.removeEventListener('message', handleMessage);
-}, []);
+}, [project]);
 
   useEffect(() => {
     if (project?.uid) {
@@ -212,6 +228,9 @@ useEffect(() => {
               if (transData.status === 'completed') {
                 setIsPaid(true);
                 setIsPaying(false);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(`paid_${project?.id}`, 'true');
+                }
                 setToast({ message: "Payment confirmed successfully!", type: "success" });
                 return true; // Stop polling
               } else if (transData.status === 'failed') {
