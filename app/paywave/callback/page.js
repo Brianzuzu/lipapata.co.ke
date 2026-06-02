@@ -1,8 +1,9 @@
+'use client';
+
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function PaywaveCallbackPage() {
-  const router = useRouter();
+
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const ref = searchParams?.get('ref');
 
