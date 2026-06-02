@@ -5,6 +5,7 @@ import { db } from '../../../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { auth } from '../../../lib/firebase';
 import { Loader2, ArrowRight, Globe, Image, Film, FileText, Share2 } from 'lucide-react';
+import Link from 'next/link';
 
 const TikTokIcon = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
