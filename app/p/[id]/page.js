@@ -44,6 +44,7 @@ const paymentWindowRef = useRef(null);
   const [discountError, setDiscountError] = useState('');
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [toast, setToast] = useState(null);
+const [autoDownloaded, setAutoDownloaded] = useState(false);
 
 
   useEffect(() => {
@@ -163,6 +164,39 @@ useEffect(() => {
   window.addEventListener('message', handleMessage);
   return () => window.removeEventListener('message', handleMessage);
 }, [project]);
+
+// Auto‑download files once payment is confirmed
+useEffect(() => {
+  if (isPaid && !autoDownloaded && transactionId && project) {
+    const filesToDownload = project.files && project.files.length > 0
+      ? project.files
+      : [{ fileName: project.fileName, originalUrl: project.originalUrl }];
+
+    filesToDownload.forEach(async (f, idx) => {
+      const safeName = (f.fileName || project.title || `file_${idx}`).replace(/[^a-z0-9.]/gi, '_');
+      try {
+        const downloadUrl = `/api/download/${project.id}?t=${transactionId}${project.files && project.files.length > 0 ? `&index=${idx}` : ''}`;
+        const response = await fetch(downloadUrl);
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || 'Download failed');
+        }
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.setAttribute('download', safeName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
+      } catch (err) {
+        console.error('Auto‑download error:', err);
+      }
+    });
+    setAutoDownloaded(true);
+  }
+}, [isPaid, transactionId, project, autoDownloaded]);
 
   useEffect(() => {
     if (project?.uid) {
