@@ -1,18 +1,20 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useEffect } from 'react';
 
 export default function PaywaveCallbackPage() {
 
-  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const ref = searchParams?.get('ref');
-
-  // Notify the opener window (the preview page) that payment is completed
-  if (window.opener?.postMessage && ref) {
-    window.opener.postMessage({ type: 'PAYWAVE_SUCCESS', reference: ref }, '*');
-    // Close the popup immediately after notifying the opener
-    window.close();
-  }
+  // Ensure this component runs only on the client
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const ref = searchParams.get('ref');
+    if (window.opener && ref) {
+      window.opener.postMessage({ type: 'PAYWAVE_SUCCESS', reference: ref }, '*');
+      window.close();
+    }
+  }, []);
 
   return (
     <div style={{
