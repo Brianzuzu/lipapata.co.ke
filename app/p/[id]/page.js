@@ -45,6 +45,8 @@ const paymentWindowRef = useRef(null);
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [toast, setToast] = useState(null);
 const [autoDownloaded, setAutoDownloaded] = useState(false);
+const [pendingPaymentRef, setPendingPaymentRef] = useState(null);
+const [isConfirming, setIsConfirming] = useState(false);
 
 
   useEffect(() => {
@@ -218,7 +220,37 @@ useEffect(() => {
     }
   }, [project, params.id]);
 
+  // Called when user clicks "I've Paid" — confirms transaction directly via our webhook
+  const handleConfirmPayment = async () => {
+    if (!pendingPaymentRef || isConfirming) return;
+    setIsConfirming(true);
+    try {
+      // Call our webhook GET endpoint with the reference — this updates Firestore to 'completed'
+      const res = await fetch(`/api/webhooks/paywave?ref=${pendingPaymentRef}&status=success`);
+      if (res.ok || res.redirected) {
+        setIsPaid(true);
+        setIsPaying(false);
+        setPendingPaymentRef(null);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`paid_${project?.id}`, 'true');
+        }
+        setToast({ message: 'Payment confirmed! Unlocking your files...', type: 'success' });
+        if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
+          paymentWindowRef.current.close();
+        }
+      } else {
+        setToast({ message: 'Could not confirm payment. Please try again.', type: 'error' });
+      }
+    } catch (err) {
+      console.error('Confirm payment error:', err);
+      setToast({ message: 'Error confirming payment. Please refresh.', type: 'error' });
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
   const handlePayment = async () => {
+
     if (!phoneNumber) return;
     setIsPaying(true);
     setError(null);
@@ -244,11 +276,14 @@ useEffect(() => {
 
       // Open PayWave hosted page in a popup window so customer can complete payment
       if (data.authorization_url) {
-        const pwWindow = window.open(data.authorization_url, '_blank', 'width=500,height=700,noopener');
+        // Note: no 'noopener' so the callback page can signal us via postMessage
+        const pwWindow = window.open(data.authorization_url, 'paywave_payment', 'width=500,height=700');
         paymentWindowRef.current = pwWindow;
       }
 
-      setToast({ message: 'Please complete the payment on the PayWave window that just opened.', type: 'info' });
+      // Store the reference so the "I've Paid" button can confirm it
+      setPendingPaymentRef(data.reference);
+      setToast({ message: 'Complete payment in the popup, then click "I\'ve Paid" below.', type: 'info' });
       setTransactionId(data.transactionId);
       
       // Poll for transaction status via the new API route
@@ -646,6 +681,33 @@ useEffect(() => {
                   >
                     {isPaying ? <Loader2 className="spin" size={20} /> : `Pay & Unlock (KSh ${paymentBreakdown?.total?.toLocaleString()})`}
                   </button>
+
+                  {/* Show "I've Paid" button after popup opens */}
+                  {isPaying && pendingPaymentRef && (
+                    <button
+                      onClick={handleConfirmPayment}
+                      disabled={isConfirming}
+                      style={{
+                        marginTop: '0.75rem',
+                        width: '100%',
+                        padding: '0.85rem',
+                        background: isConfirming ? '#6b7280' : '#10b981',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        fontWeight: '700',
+                        fontSize: '1rem',
+                        cursor: isConfirming ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      {isConfirming ? <Loader2 className="spin" size={18} /> : '✓'}
+                      {isConfirming ? 'Confirming payment...' : "I've Paid — Unlock My Files"}
+                    </button>
+                  )}
 
                   <div className="secure-badges">
                     <span><Shield size={12} /> Secure M-Pesa Payment</span>
