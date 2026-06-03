@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '../../../../lib/firebase';
-import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, setDoc, doc, serverTimestamp, increment } from 'firebase/firestore';
 
 /**
  * Paywave Express Payment Webhook / Callback
@@ -24,7 +24,13 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
   // Prevent double processing
   if (transactionData.status === 'completed') return { ok: true, message: 'Already completed', projectId: transactionData.projectId };
 
-  const isSuccess = !status || status === 'success' || status === 'successful' || status === 'completed';
+  const normalizedStatus = (status || '').toString().toLowerCase();
+  const isSuccess = !status || 
+                    normalizedStatus === 'success' || 
+                    normalizedStatus === 'successful' || 
+                    normalizedStatus === 'completed' || 
+                    normalizedStatus === '0' ||
+                    normalizedStatus === 'approved';
 
   if (isSuccess) {
     // Mark transaction as completed
@@ -50,10 +56,11 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
     const creatorRef = doc(db, 'users', transactionData.creatorUid);
     const earnings = transactionData.creatorEarnings || 0;
     
-    await updateDoc(creatorRef, {
+    // Use setDoc with merge in case the user doc doesn't exist yet
+    await setDoc(creatorRef, {
       balance: increment(earnings),
       totalSales: increment(1)
-    });
+    }, { merge: true });
 
     console.log(`✅ Payment Successful for Reference: ${transactionData.reference}. Creator earnings KSh ${earnings} added.`);
     return { ok: true, message: 'Transaction completed', projectId: transactionData.projectId };
@@ -63,6 +70,16 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
       failureReason: status || 'Payment failed',
       updatedAt: serverTimestamp(),
     });
+    
+    // Also reset project status so it's not stuck on "paying"
+    if (transactionData.projectId) {
+      const projectRef = doc(db, 'projects', transactionData.projectId);
+      await updateDoc(projectRef, {
+        status: 'active',
+        lastUpdated: serverTimestamp(),
+      });
+    }
+
     console.log(`❌ Payment Failed for Reference: ${transactionData.reference}`);
     return { ok: false, message: 'Payment failed', projectId: transactionData.projectId };
   }
@@ -98,7 +115,14 @@ export async function GET(request) {
 // POST: Background server-to-server notification from Paywave
 export async function POST(request) {
   try {
-    const payload = await request.json();
+    let payload;
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      const text = await request.text();
+      payload = Object.fromEntries(new URLSearchParams(text));
+    } else {
+      payload = await request.json();
+    }
     
     console.log('PayWave Webhook Payload received:', JSON.stringify(payload));
 

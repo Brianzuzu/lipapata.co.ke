@@ -6,6 +6,7 @@ import {
   where, 
   getDocs, 
   updateDoc, 
+  setDoc,
   doc, 
   serverTimestamp,
   increment 
@@ -71,10 +72,11 @@ export async function POST(request) {
       const creatorRef = doc(db, 'users', transactionData.creatorUid);
       const earnings = transactionData.creatorEarnings || 0;
       
-      await updateDoc(creatorRef, {
+      // Use setDoc with merge in case the user doc doesn't exist yet
+      await setDoc(creatorRef, {
         balance: increment(earnings),
         totalSales: increment(1)
-      });
+      }, { merge: true });
 
       console.log(`✅ Payment Successful: ${mpesaReceiptNumber} for Project ${transactionData.projectId}. Creator earnings KSh ${earnings} added.`);
     } else {
@@ -85,6 +87,15 @@ export async function POST(request) {
         resultCode: ResultCode,
         updatedAt: serverTimestamp(),
       });
+      
+      // Also reset project status so it's not stuck on "paying"
+      if (transactionData.projectId) {
+        const projectRef = doc(db, 'projects', transactionData.projectId);
+        await updateDoc(projectRef, {
+          status: 'active',
+          lastUpdated: serverTimestamp(),
+        });
+      }
 
       console.log(`❌ Payment Failed: ${ResultDesc}`);
     }
