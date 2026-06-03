@@ -642,8 +642,38 @@ useEffect(() => {
                         <span>Waiting for payment confirmation...</span>
                       </div>
                       <button
+                        onClick={handleConfirmPayment}
+                        disabled={isConfirming}
+                        style={{
+                          marginTop: '1.2rem',
+                          background: '#16a34a',
+                          color: 'white',
+                          border: 'none',
+                          padding: '0.75rem 1.5rem',
+                          borderRadius: '10px',
+                          fontSize: '0.9rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                          boxShadow: '0 4px 10px rgba(22, 163, 74, 0.25)'
+                        }}
+                      >
+                        {isConfirming ? (
+                          <>
+                            <Loader2 className="spin" size={16} />
+                            <span>Verifying...</span>
+                          </>
+                        ) : (
+                          "I've Paid / Verify Payment"
+                        )}
+                      </button>
+                      <button
                         onClick={() => { setIsPaying(false); setPendingPaymentRef(null); }}
-                        style={{ marginTop: '1rem', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline' }}
+                        style={{ marginTop: '1rem', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', display: 'block', width: '100%' }}
                       >
                         Cancel and try again
                       </button>
