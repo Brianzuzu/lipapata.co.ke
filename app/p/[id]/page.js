@@ -143,7 +143,25 @@ if (typeof window !== 'undefined') {
     }
   }, [project, globalSettings, customPrice, appliedDiscount]);
 
-// No longer need to listen for postMessage from PayWave because we are using Direct API
+// Listen for payment success signal from the PayWave callback popup window
+useEffect(() => {
+  const handleMessage = (event) => {
+    if (event.origin !== window.location.origin) return;
+    if (event.data?.type === 'PAYWAVE_SUCCESS') {
+      setIsPaid(true);
+      setIsPaying(false);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`paid_${project?.id}`, 'true');
+      }
+      setToast({ message: "Payment confirmed! Unlocking your files...", type: "success" });
+      if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
+        paymentWindowRef.current.close();
+      }
+    }
+  };
+  window.addEventListener('message', handleMessage);
+  return () => window.removeEventListener('message', handleMessage);
+}, [project]);
 
 // Auto‑download files once payment is confirmed
 useEffect(() => {
