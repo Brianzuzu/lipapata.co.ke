@@ -73,7 +73,11 @@ export async function POST(request) {
     const reference = `LIPA-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
-    const callbackUrl = `${baseUrl}/api/webhooks/paywave?ref=${reference}`;
+    
+    // Point callback to our user-facing page — it will confirm with the webhook
+    // and redirect the user back to the product page automatically.
+    // We pre-generate the transaction doc ID placeholder by using reference as key.
+    const callbackUrl = `${baseUrl}/paywave/callback?ref=${reference}&projectId=${projectId}`;
 
     const authorization_url = buildPaywavePaymentUrl({
       customerEmail: email,
