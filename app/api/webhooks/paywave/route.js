@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { db } from '../../../../lib/firebase';
 import { collection, query, where, getDocs, updateDoc, setDoc, doc, serverTimestamp, increment } from 'firebase/firestore';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Paywave Express Payment Webhook / Callback
  * Handles both:
@@ -10,27 +12,40 @@ import { collection, query, where, getDocs, updateDoc, setDoc, doc, serverTimest
  */
 
 async function handlePaywaveConfirmation(reference, status, paywaveTransactionId) {
+  console.log(`[PAYWAVE] handlePaywaveConfirmation called: ref=${reference}, status=${status}, txId=${paywaveTransactionId}`);
+  
   if (!reference) return { ok: false, message: 'No reference' };
 
   // Find the transaction in Firestore by reference
   const q = query(collection(db, 'transactions'), where('reference', '==', reference));
   const querySnapshot = await getDocs(q);
 
-  if (querySnapshot.empty) return { ok: false, message: 'Transaction not found' };
+  if (querySnapshot.empty) {
+    console.log(`[PAYWAVE] ❌ Transaction NOT found for reference: ${reference}`);
+    return { ok: false, message: 'Transaction not found' };
+  }
 
   const transactionDoc = querySnapshot.docs[0];
   const transactionData = transactionDoc.data();
 
-  // Prevent double processing
-  if (transactionData.status === 'completed') return { ok: true, message: 'Already completed', projectId: transactionData.projectId };
+  console.log(`[PAYWAVE] Found transaction ${transactionDoc.id}, current status: ${transactionData.status}`);
 
-  const normalizedStatus = (status || '').toString().toLowerCase();
+  // Prevent double processing
+  if (transactionData.status === 'completed') {
+    console.log(`[PAYWAVE] Already completed, skipping.`);
+    return { ok: true, message: 'Already completed', projectId: transactionData.projectId };
+  }
+
+  const normalizedStatus = (status || '').toString().toLowerCase().trim();
   const isSuccess = !status || 
                     normalizedStatus === 'success' || 
                     normalizedStatus === 'successful' || 
                     normalizedStatus === 'completed' || 
                     normalizedStatus === '0' ||
-                    normalizedStatus === 'approved';
+                    normalizedStatus === 'approved' ||
+                    normalizedStatus === 'paid';
+
+  console.log(`[PAYWAVE] normalizedStatus="${normalizedStatus}", isSuccess=${isSuccess}`);
 
   if (isSuccess) {
     // Mark transaction as completed
@@ -52,18 +67,18 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
       });
     }
 
-    // 🔥 UPDATE CREATOR'S BALANCE (This was missing!)
+    // UPDATE CREATOR'S BALANCE
     const creatorRef = doc(db, 'users', transactionData.creatorUid);
     const earnings = transactionData.creatorEarnings || 0;
     
-    // Use setDoc with merge in case the user doc doesn't exist yet
     await setDoc(creatorRef, {
       balance: increment(earnings),
       totalSales: increment(1)
     }, { merge: true });
 
-    console.log(`✅ Payment Successful for Reference: ${transactionData.reference}. Creator earnings KSh ${earnings} added.`);
+    console.log(`[PAYWAVE] ✅ Payment Successful for Reference: ${transactionData.reference}. Creator earnings KSh ${earnings} added.`);
     return { ok: true, message: 'Transaction completed', projectId: transactionData.projectId };
+
   } else {
     await updateDoc(doc(db, 'transactions', transactionDoc.id), {
       status: 'failed',
@@ -71,7 +86,7 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
       updatedAt: serverTimestamp(),
     });
     
-    // Also reset project status so it's not stuck on "paying"
+    // Reset project status so it's not stuck on "paying"
     if (transactionData.projectId) {
       const projectRef = doc(db, 'projects', transactionData.projectId);
       await updateDoc(projectRef, {
@@ -80,41 +95,43 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
       });
     }
 
-    console.log(`❌ Payment Failed for Reference: ${transactionData.reference}`);
+    console.log(`[PAYWAVE] ❌ Payment Failed for Reference: ${transactionData.reference}, status: ${status}`);
     return { ok: false, message: 'Payment failed', projectId: transactionData.projectId };
   }
 }
 
-// GET: Paywave redirects the browser here after payment
+// GET: Paywave redirects the browser here after payment (browser redirect callback)
 export async function GET(request) {
   let projectId = '';
   try {
     const { searchParams } = new URL(request.url);
-    const reference = searchParams.get('ref') || searchParams.get('reference');
-    const status    = searchParams.get('status');
-    const txId      = searchParams.get('transaction_id') || searchParams.get('txid');
+    const reference = searchParams.get('ref') || searchParams.get('reference') || searchParams.get('order_id') || searchParams.get('orderid');
+    const status    = searchParams.get('status') || searchParams.get('Status');
+    const txId      = searchParams.get('transaction_id') || searchParams.get('txid') || searchParams.get('TransactionID');
+
+    console.log(`[PAYWAVE GET] ref=${reference}, status=${status}, txId=${txId}, fullUrl=${request.url}`);
 
     const result = await handlePaywaveConfirmation(reference, status, txId);
     projectId = result.projectId || '';
 
-    // Redirect customer to their download/success page
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
     const normalizedStatus = (status || '').toString().toLowerCase();
-    const isSuccess = !status || 
+    const isSuccess = result.ok || !status || 
                       normalizedStatus === 'success' || 
                       normalizedStatus === 'successful' || 
                       normalizedStatus === 'completed' || 
                       normalizedStatus === '0' ||
                       normalizedStatus === 'approved';
+
     const redirectUrl = isSuccess
       ? `${baseUrl}/paywave/callback?ref=${reference}&status=success&projectId=${projectId}`
       : `${baseUrl}/paywave/callback?ref=${reference}&status=failed&projectId=${projectId}`;
 
     return NextResponse.redirect(redirectUrl);
   } catch (error) {
-    console.error('Paywave GET Webhook Error:', error);
+    console.error('[PAYWAVE GET] Error:', error);
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
-    return NextResponse.redirect(projectId ? `${baseUrl}/p/${projectId}?error=server_error` : `${baseUrl}/login`);
+    return NextResponse.redirect(projectId ? `${baseUrl}/p/${projectId}` : `${baseUrl}/`);
   }
 }
 
@@ -122,25 +139,66 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     let payload;
+    let rawBody = '';
     const contentType = request.headers.get('content-type') || '';
+    
     if (contentType.includes('application/x-www-form-urlencoded')) {
-      const text = await request.text();
-      payload = Object.fromEntries(new URLSearchParams(text));
+      rawBody = await request.text();
+      payload = Object.fromEntries(new URLSearchParams(rawBody));
     } else {
-      payload = await request.json();
+      rawBody = await request.text();
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        payload = Object.fromEntries(new URLSearchParams(rawBody));
+      }
     }
     
-    console.log('PayWave Webhook Payload received:', JSON.stringify(payload));
+    // Log the FULL raw payload so we can see exactly what PayWave sends
+    console.log('[PAYWAVE POST] Raw body:', rawBody);
+    console.log('[PAYWAVE POST] Parsed payload:', JSON.stringify(payload));
+    console.log('[PAYWAVE POST] Content-Type:', contentType);
+    console.log('[PAYWAVE POST] All keys:', Object.keys(payload).join(', '));
 
-    // PayWave sends PascalCase keys. Reference is in TransactionReference.
-    // ResponseCode: 0 means success (NOT a truthy value — use explicit check!)
-    const reference = payload.reference || payload.TransactionReference || payload.transaction_reference;
-    const transaction_id = payload.TransactionReceipt || payload.TransactionID || payload.transaction_id;
+    // Try every possible field name PayWave might use for the reference
+    const reference = 
+      payload.reference || 
+      payload.Reference ||
+      payload.TransactionReference || 
+      payload.transaction_reference ||
+      payload.order_id ||
+      payload.orderid ||
+      payload.OrderID ||
+      payload.ref;
 
-    // ResponseCode of 0 OR ResponseDescription of "Success" means payment succeeded
-    const responseCode = payload.ResponseCode ?? payload.ResultCode ?? payload.responseCode ?? payload.resultCode ?? payload.status;
-    const responseDesc = (payload.ResponseDescription || payload.ResultDesc || payload.status || payload.TransactionStatus || payload.message || '').toString().toLowerCase();
+    const transaction_id = 
+      payload.TransactionReceipt || 
+      payload.TransactionID || 
+      payload.transaction_id ||
+      payload.receipt ||
+      payload.mpesa_receipt;
+
+    // Try every possible field name for the status/result
+    const responseCode = 
+      payload.ResponseCode ?? 
+      payload.ResultCode ?? 
+      payload.responseCode ?? 
+      payload.resultCode ??
+      payload.code;
+
+    const responseDesc = (
+      payload.ResponseDescription || 
+      payload.ResultDesc || 
+      payload.status || 
+      payload.Status ||
+      payload.TransactionStatus || 
+      payload.message ||
+      payload.description ||
+      ''
+    ).toString().toLowerCase();
     
+    console.log(`[PAYWAVE POST] reference="${reference}", responseCode="${responseCode}", responseDesc="${responseDesc}"`);
+
     const isSuccess = 
       responseCode === 0 || 
       responseCode === '0' ||
@@ -148,12 +206,13 @@ export async function POST(request) {
       responseDesc.includes('success') ||
       responseDesc.includes('completed') ||
       responseDesc.includes('paid') ||
-      responseDesc.includes('approved') ||
-      responseDesc === '0';
+      responseDesc.includes('approved');
 
     const status = isSuccess ? 'success' : 'failed';
+    console.log(`[PAYWAVE POST] isSuccess=${isSuccess}, treating as status="${status}"`);
 
     const result = await handlePaywaveConfirmation(reference, status, transaction_id);
+    console.log('[PAYWAVE POST] Result:', JSON.stringify(result));
 
     if (!result.ok && result.message === 'Transaction not found') {
       return new NextResponse('Transaction not found', { status: 404 });
@@ -161,7 +220,7 @@ export async function POST(request) {
 
     return new NextResponse('OK', { status: 200 });
   } catch (error) {
-    console.error('Paywave POST Webhook Error:', error);
+    console.error('[PAYWAVE POST] Error:', error);
     return new NextResponse('Internal Server Error', { status: 500 });
   }
 }
