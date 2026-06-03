@@ -42,6 +42,8 @@ export default function ProjectPreview({ params }) {
   const [discountError, setDiscountError] = useState('');
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [toast, setToast] = useState(null);
+  const [pendingPaymentRef, setPendingPaymentRef] = useState(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
 
   useEffect(() => {
