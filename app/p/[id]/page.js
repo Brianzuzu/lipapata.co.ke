@@ -235,24 +235,33 @@ useEffect(() => {
       
       // Poll for transaction status via the new API route
       const pollTransaction = async () => {
+        let stopped = false;
+
         const checkStatus = async () => {
+          if (stopped) return true;
           try {
             const statusRes = await fetch(`/api/pay/status?transactionId=${data.transactionId}`);
             if (statusRes.ok) {
               const statusData = await statusRes.json();
               if (statusData.status === 'completed') {
+                stopped = true;
                 setIsPaid(true);
                 setIsPaying(false);
                 if (typeof window !== 'undefined') {
                   localStorage.setItem(`paid_${project?.id}`, 'true');
                 }
-                setToast({ message: "Payment confirmed successfully!", type: "success" });
-                return true; // Stop polling
+                setToast({ message: "Payment confirmed! Unlocking your files...", type: "success" });
+                // Close popup if still open
+                if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
+                  paymentWindowRef.current.close();
+                }
+                return true;
               } else if (statusData.status === 'failed') {
+                stopped = true;
                 setError(`Payment failed. Please try again.`);
                 setToast({ message: "Payment failed or cancelled.", type: "error" });
                 setIsPaying(false);
-                return true; // Stop polling
+                return true;
               }
             }
             return false;
@@ -262,20 +271,41 @@ useEffect(() => {
           }
         };
 
+        // Poll every 2 seconds
         const interval = setInterval(async () => {
           const finished = await checkStatus();
-          if (finished) clearInterval(interval);
-        }, 3000);
+          if (finished) {
+            clearInterval(interval);
+            clearInterval(windowWatcher);
+          }
+        }, 2000);
 
-        // Timeout after 2 minutes
+        // Also watch for the PayWave popup closing — when it closes, do an immediate check
+        const windowWatcher = setInterval(async () => {
+          if (paymentWindowRef.current && paymentWindowRef.current.closed) {
+            clearInterval(windowWatcher);
+            // Popup closed — check status immediately a few times
+            for (let i = 0; i < 5; i++) {
+              await new Promise(r => setTimeout(r, 2000));
+              const finished = await checkStatus();
+              if (finished) {
+                clearInterval(interval);
+                break;
+              }
+            }
+          }
+        }, 1000);
+
+        // Timeout after 3 minutes
         setTimeout(() => {
-          clearInterval(interval);
-          if (!isPaid && isPaying) {
+          if (!stopped) {
+            clearInterval(interval);
+            clearInterval(windowWatcher);
             setError("Payment confirmation timed out. If you've paid, please refresh the page.");
-            setToast({ message: "Payment timed out.", type: "error" });
+            setToast({ message: "Timed out waiting for confirmation. Please refresh.", type: "error" });
             setIsPaying(false);
           }
-        }, 120000);
+        }, 180000);
       };
 
       pollTransaction();

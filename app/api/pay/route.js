@@ -73,7 +73,7 @@ export async function POST(request) {
     const reference = `LIPA-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const callbackUrl = `${baseUrl}/api/webhooks/paywave`;
+    const callbackUrl = `${baseUrl}/api/webhooks/paywave?ref=${reference}`;
 
     const authorization_url = buildPaywavePaymentUrl({
       customerEmail: email,
