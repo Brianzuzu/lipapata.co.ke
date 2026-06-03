@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/pay/status?transactionId=xxx
  * Polls Firestore for the current transaction status.
