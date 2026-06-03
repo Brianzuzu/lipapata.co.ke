@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '../../../../lib/firebase';
 import { collection, query, where, getDocs, updateDoc, setDoc, doc, serverTimestamp, increment } from 'firebase/firestore';
+import { checkPaywaveTransactionStatus } from '../../../../lib/paywave';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,12 +112,61 @@ export async function GET(request) {
 
     console.log(`[PAYWAVE GET] ref=${reference}, status=${status}, txId=${txId}, fullUrl=${request.url}`);
 
-    const result = await handlePaywaveConfirmation(reference, status, txId);
+    // Secure verification check:
+    let verifiedStatus = status;
+    let verifiedTxId = txId;
+
+    if (reference) {
+      const q = query(collection(db, 'transactions'), where('reference', '==', reference));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const transDoc = querySnapshot.docs[0];
+        const transData = transDoc.data();
+
+        if (transData.status === 'completed') {
+          verifiedStatus = 'success';
+        } else if (transData.transactionRequestId) {
+          try {
+            console.log(`[PAYWAVE GET] Verifying with PayWave API for transactionRequestId: ${transData.transactionRequestId}`);
+            const apiRes = await checkPaywaveTransactionStatus(transData.transactionRequestId);
+            console.log(`[PAYWAVE GET] PayWave API status check response:`, JSON.stringify(apiRes));
+
+            const isApiSuccess = apiRes && (
+              apiRes.status === 'success' || 
+              apiRes.status === 'completed' || 
+              apiRes.status === 'successful' || 
+              apiRes.resultCode === 0 || 
+              apiRes.resultCode === '0' ||
+              apiRes.ResultCode === '0' ||
+              apiRes.ResultCode === 0 ||
+              apiRes.success === true ||
+              apiRes.ResponseCode === '00' ||
+              apiRes.ResponseCode === '0'
+            );
+
+            if (isApiSuccess) {
+              verifiedStatus = 'success';
+              verifiedTxId = apiRes.transaction_id || apiRes.transactionId || apiRes.Receipt || txId || 'PWX-VERIFIED';
+            } else {
+              console.log(`[PAYWAVE GET] PayWave API check did not confirm success. apiRes:`, apiRes);
+              verifiedStatus = 'failed';
+            }
+          } catch (apiError) {
+            console.error('[PAYWAVE GET] PayWave API verification failed:', apiError);
+            verifiedStatus = 'failed';
+          }
+        } else {
+          console.log(`[PAYWAVE GET] No transactionRequestId found in Firestore. Falling back to URL status.`);
+        }
+      }
+    }
+
+    const result = await handlePaywaveConfirmation(reference, verifiedStatus, verifiedTxId);
     projectId = result.projectId || '';
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
-    const normalizedStatus = (status || '').toString().toLowerCase();
-    const isSuccess = result.ok || !status || 
+    const normalizedStatus = (verifiedStatus || '').toString().toLowerCase();
+    const isSuccess = result.ok || 
                       normalizedStatus === 'success' || 
                       normalizedStatus === 'successful' || 
                       normalizedStatus === 'completed' || 

@@ -114,6 +114,13 @@ export async function POST(request) {
         reference,
       });
       console.log('[PAY] STK Push Response:', JSON.stringify(stkResponse));
+      
+      // Update transaction with the Paywave request ID
+      const txReqId = stkResponse?.transaction_request_id || stkResponse?.id || stkResponse?.TransactionId || null;
+      await updateDoc(transactionRef, {
+        transactionRequestId: txReqId,
+        stkResponseRaw: JSON.stringify(stkResponse)
+      });
     } catch (stkError) {
       console.error('[PAY] STK Push Error:', stkError);
       // Clean up — reset project status
