@@ -256,9 +256,6 @@ useEffect(() => {
         if (data.transactionId) {
           localStorage.setItem(`tx_${project?.id}`, data.transactionId);
         }
-        // NOTE: Keeping paid_ true here for compatibility with existing flow,
-        // although ideally it shouldn't be set until payment is confirmed.
-        localStorage.setItem(`paid_${project?.id}`, 'true');
       }
       
       // Redirect to Paywave hosted payment page

@@ -45,6 +45,7 @@ export default function PaywaveCallbackPage() {
         // Redirect back to the product page so auto-download triggers
         setTimeout(() => {
           if (projectId) {
+            localStorage.setItem(`paid_${projectId}`, 'true');
             window.location.href = `/p/${projectId}`;
           } else {
             window.location.href = '/';
