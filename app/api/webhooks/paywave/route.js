@@ -69,8 +69,8 @@ export async function GET(request) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const isSuccess = !status || status === 'success' || status === 'successful' || status === 'completed';
     const redirectUrl = isSuccess
-      ? `${baseUrl}/api/download?ref=${reference}`
-      : `${baseUrl}/p/${projectId}?error=payment_failed`;
+      ? `${baseUrl}/paywave/callback?ref=${reference}&status=success`
+      : `${baseUrl}/paywave/callback?ref=${reference}&status=failed`;
 
     return NextResponse.redirect(redirectUrl);
   } catch (error) {
