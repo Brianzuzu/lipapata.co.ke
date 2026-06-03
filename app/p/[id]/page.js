@@ -150,7 +150,8 @@ useEffect(() => {
     filesToDownload.forEach(async (f, idx) => {
       const safeName = (f.fileName || project.title || `file_${idx}`).replace(/[^a-z0-9.]/gi, '_');
       try {
-        const downloadUrl = `/api/download/${project.id}${project.files && project.files.length > 0 ? `?index=${idx}` : ''}`;
+        const txId = (typeof window !== 'undefined' ? localStorage.getItem(`tx_${project.id}`) : null) || project.lastTransactionId;
+        const downloadUrl = `/api/download/${project.id}?t=${txId}${project.files && project.files.length > 0 ? `&index=${idx}` : ''}`;
         const response = await fetch(downloadUrl);
         if (!response.ok) {
           const errData = await response.json();
@@ -252,6 +253,11 @@ useEffect(() => {
       if (typeof window !== 'undefined') {
         localStorage.setItem('user_phone', phoneNumber);
         localStorage.setItem('user_email', email);
+        if (data.transactionId) {
+          localStorage.setItem(`tx_${project?.id}`, data.transactionId);
+        }
+        // NOTE: Keeping paid_ true here for compatibility with existing flow,
+        // although ideally it shouldn't be set until payment is confirmed.
         localStorage.setItem(`paid_${project?.id}`, 'true');
       }
       
@@ -437,13 +443,16 @@ useEffect(() => {
                     
                     const handleDownload = async (e, index, safeName) => {
                       e.preventDefault();
-                      if (!transactionId) {
+                      
+                      const txId = (typeof window !== 'undefined' ? localStorage.getItem(`tx_${project.id}`) : null) || project.lastTransactionId;
+                      
+                      if (!txId) {
                         alert("Transaction not found. Please refresh and try again.");
                         return;
                       }
 
                       try {
-                        const downloadUrl = `/api/download/${project.id}?t=${transactionId}${project.files && project.files.length > 0 ? `&index=${index}` : ''}`;
+                        const downloadUrl = `/api/download/${project.id}?t=${txId}${project.files && project.files.length > 0 ? `&index=${index}` : ''}`;
                         const response = await fetch(downloadUrl);
                         if (!response.ok) {
                           const errData = await response.json();
