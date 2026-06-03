@@ -99,7 +99,13 @@ export async function GET(request) {
 
     // Redirect customer to their download/success page
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
-    const isSuccess = !status || status === 'success' || status === 'successful' || status === 'completed';
+    const normalizedStatus = (status || '').toString().toLowerCase();
+    const isSuccess = !status || 
+                      normalizedStatus === 'success' || 
+                      normalizedStatus === 'successful' || 
+                      normalizedStatus === 'completed' || 
+                      normalizedStatus === '0' ||
+                      normalizedStatus === 'approved';
     const redirectUrl = isSuccess
       ? `${baseUrl}/paywave/callback?ref=${reference}&status=success&projectId=${projectId}`
       : `${baseUrl}/paywave/callback?ref=${reference}&status=failed&projectId=${projectId}`;
