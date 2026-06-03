@@ -236,20 +236,31 @@ useEffect(() => {
     }
   }, [project, params.id]);
 
-  // Called when user clicks "I've Paid" — confirms transaction directly via our webhook
+  // Called when user clicks "I've Paid" — queries the status route securely with forceCheck=true
   const handleConfirmPayment = async () => {
-    if (!pendingPaymentRef || isConfirming) return;
+    if (!project || isConfirming) return;
+    const txId = typeof window !== 'undefined' ? localStorage.getItem(`tx_${project.id}`) : null;
+    if (!txId) {
+      setToast({ message: 'No pending transaction found. Please try again.', type: 'error' });
+      return;
+    }
+    
     setIsConfirming(true);
     try {
-      const res = await fetch(`/api/webhooks/paywave?ref=${pendingPaymentRef}&status=success`);
-      if (res.ok || res.redirected) {
-        setIsPaid(true);
-        setIsPaying(false);
-        setPendingPaymentRef(null);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(`paid_${project?.id}`, 'true');
+      const res = await fetch(`/api/pay/status?transactionId=${txId}&forceCheck=true`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'completed' || data.status === 'success') {
+          setIsPaid(true);
+          setIsPaying(false);
+          setPendingPaymentRef(null);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`paid_${project.id}`, 'true');
+          }
+          setToast({ message: 'Payment confirmed! Unlocking your files...', type: 'success' });
+        } else {
+          setToast({ message: 'Payment is still processing or has not gone through yet. Please enter PIN first.', type: 'warning' });
         }
-        setToast({ message: 'Payment confirmed! Unlocking your files...', type: 'success' });
       } else {
         setToast({ message: 'Could not confirm payment. Please try again.', type: 'error' });
       }
