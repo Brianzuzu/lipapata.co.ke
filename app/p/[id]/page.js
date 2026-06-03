@@ -143,27 +143,7 @@ if (typeof window !== 'undefined') {
     }
   }, [project, globalSettings, customPrice, appliedDiscount]);
 
-// Listen for Paywave payment success messages
-useEffect(() => {
-  const handleMessage = (event) => {
-    if (event.data?.type === 'PAYWAVE_SUCCESS') {
-      setIsPaid(true);
-      setIsPaying(false);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(`paid_${project?.id}`, 'true');
-      }
-      setToast({ message: "Payment confirmed successfully!", type: "success" });
-      // Close the Paywave popup if still open
-      if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
-        paymentWindowRef.current.close();
-      }
-      // Refresh the page to reflect unlocked content
-      router.replace(router.asPath);
-    }
-  };
-  window.addEventListener('message', handleMessage);
-  return () => window.removeEventListener('message', handleMessage);
-}, [project]);
+// No longer need to listen for postMessage from PayWave because we are using Direct API
 
 // Auto‑download files once payment is confirmed
 useEffect(() => {
@@ -244,37 +224,29 @@ useEffect(() => {
         throw new Error(data.error || 'Payment failed');
       }
 
-      // Open Paywave checkout in a new window and keep a reference
-      if (data.authorization_url) {
-        const pwWindow = window.open(data.authorization_url, '_blank');
-        paymentWindowRef.current = pwWindow;
-      }
+      // Show the message returned from the API (usually "Please enter your MPESA PIN...")
+      setToast({ message: data.message || 'Please check your phone for the M-Pesa prompt.', type: 'info' });
 
       setTransactionId(data.transactionId);
       
-      // Poll for transaction status
+      // Poll for transaction status via the new API route
       const pollTransaction = async () => {
         const checkStatus = async () => {
           try {
-            const transSnap = await getDoc(doc(db, 'transactions', data.transactionId));
-            if (transSnap.exists()) {
-              const transData = transSnap.data();
-                if (transData.status === 'completed') {
-                  setIsPaid(true);
-                  setIsPaying(false);
-                  if (typeof window !== 'undefined') {
-                    localStorage.setItem(`paid_${project?.id}`, 'true');
-                  }
-                  setToast({ message: "Payment confirmed successfully!", type: "success" });
-                  // Close the Paywave window if it's still open
-                  if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
-                    paymentWindowRef.current.close();
-                    paymentWindowRef.current = null;
-                  }
-                  return true; // Stop polling
-                } else if (transData.status === 'failed') {
-                setError(`Payment failed: ${transData.failureReason || 'Unknown error'}`);
-                setToast({ message: "Payment failed. Please try again.", type: "error" });
+            const statusRes = await fetch(`/api/pay/status?transactionId=${data.transactionId}`);
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              if (statusData.status === 'completed') {
+                setIsPaid(true);
+                setIsPaying(false);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(`paid_${project?.id}`, 'true');
+                }
+                setToast({ message: "Payment confirmed successfully!", type: "success" });
+                return true; // Stop polling
+              } else if (statusData.status === 'failed') {
+                setError(`Payment failed. Please try again.`);
+                setToast({ message: "Payment failed or cancelled.", type: "error" });
                 setIsPaying(false);
                 return true; // Stop polling
               }

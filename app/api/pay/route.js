@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { calculateCommission } from '../../../lib/commission';
-import { buildPaywavePaymentUrl } from '../../../lib/paywave';
+import { initiatePaywaveDirectStkPush } from '../../../lib/paywave';
 import { getGlobalSettings } from '../../../lib/settings';
 
 export async function POST(request) {
@@ -69,20 +69,21 @@ export async function POST(request) {
     // 3. Calculate commission
     const breakdown = calculateCommission(amountToCharge, creatorPlan, customRate);
 
-    // 4. Generate unique reference and build Paywave payment URL
+    // 4. Generate unique reference and initiate STK Push
     const reference = `LIPA-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const callbackUrl = `${baseUrl}/api/webhooks/paywave?ref=${reference}`;
-
-    const authorization_url = buildPaywavePaymentUrl({
-      customerEmail: email,  // Customer's email for receipt
+    const paywaveResponse = await initiatePaywaveDirectStkPush({
+      email: email,  
       amount: breakdown.total,
       reference,
       phoneNumber: formattedPhone,
-      description: project.title || 'Lipapata Digital Content',
-      callbackUrl,
     });
+
+    if (paywaveResponse.ResultCode || paywaveResponse.errorMessage) {
+      throw new Error(paywaveResponse.errorMessage || 'Failed to initiate STK push');
+    }
+
+    const transactionRequestId = paywaveResponse.transaction_request_id || null;
 
     // 5. Create a pending transaction record in Firestore
     const transactionRef = await addDoc(collection(db, 'transactions'), {
@@ -98,6 +99,7 @@ export async function POST(request) {
       commissionRate: breakdown.commissionRate,
       creatorEarnings: breakdown.creatorEarnings,
       reference,
+      transactionRequestId,
       status: 'pending',
       discountCode: appliedDiscount || null,
       customerEmail: email,
@@ -112,13 +114,13 @@ export async function POST(request) {
       lastReference: reference,
     });
 
-    // 7. Return the Paywave hosted payment page URL to the frontend
+    // 7. Return the transaction ID to the frontend so it can poll
     return NextResponse.json({
       success: true,
-      authorization_url,
       reference,
       transactionId: transactionRef.id,
       breakdown,
+      message: paywaveResponse.message || 'Please enter your M-Pesa PIN',
     });
 
   } catch (error) {
