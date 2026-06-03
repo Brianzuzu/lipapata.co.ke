@@ -138,11 +138,18 @@ export async function POST(request) {
     const transaction_id = payload.TransactionReceipt || payload.TransactionID || payload.transaction_id;
 
     // ResponseCode of 0 OR ResponseDescription of "Success" means payment succeeded
-    const responseCode = payload.ResponseCode ?? payload.ResultCode;
-    const responseDesc = (payload.ResponseDescription || payload.ResultDesc || payload.status || '').toLowerCase();
-    const isSuccess = responseCode === 0 || responseCode === '0' ||
+    const responseCode = payload.ResponseCode ?? payload.ResultCode ?? payload.responseCode ?? payload.resultCode ?? payload.status;
+    const responseDesc = (payload.ResponseDescription || payload.ResultDesc || payload.status || payload.TransactionStatus || payload.message || '').toString().toLowerCase();
+    
+    const isSuccess = 
+      responseCode === 0 || 
+      responseCode === '0' ||
+      responseCode === '00' ||
       responseDesc.includes('success') ||
-      payload.TransactionStatus === 'Completed';
+      responseDesc.includes('completed') ||
+      responseDesc.includes('paid') ||
+      responseDesc.includes('approved') ||
+      responseDesc === '0';
 
     const status = isSuccess ? 'success' : 'failed';
 
