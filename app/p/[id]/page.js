@@ -116,6 +116,45 @@ if (typeof window !== 'undefined') {
     }
   }, [isPaid]);
 
+  // Poll for payment status in case user completes payment but isn't redirected
+  // or if they press the back button.
+  useEffect(() => {
+    let intervalId;
+    
+    if (project && !isPaid && typeof window !== 'undefined') {
+      const txId = localStorage.getItem(`tx_${project.id}`);
+      if (txId) {
+        const checkStatus = async () => {
+          try {
+            const res = await fetch(`/api/pay/status?transactionId=${txId}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.status === 'completed' || data.status === 'success') {
+                setIsPaid(true);
+                localStorage.setItem(`paid_${project.id}`, 'true');
+                setToast({ message: 'Payment confirmed! Unlocking your files...', type: 'success' });
+                setIsPaying(false);
+                clearInterval(intervalId);
+              }
+            }
+          } catch (e) {
+            console.error('Status check error:', e);
+          }
+        };
+        
+        // Check immediately
+        checkStatus();
+        
+        // Then poll every 4 seconds
+        intervalId = setInterval(checkStatus, 4000);
+      }
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [project, isPaid]);
+
   useEffect(() => {
     if (project?.price !== undefined) {
       const rate = globalSettings?.globalCommission;
@@ -200,7 +239,6 @@ useEffect(() => {
     if (!pendingPaymentRef || isConfirming) return;
     setIsConfirming(true);
     try {
-      // Call our webhook GET endpoint with the reference — this updates Firestore to 'completed'
       const res = await fetch(`/api/webhooks/paywave?ref=${pendingPaymentRef}&status=success`);
       if (res.ok || res.redirected) {
         setIsPaid(true);
@@ -210,9 +248,6 @@ useEffect(() => {
           localStorage.setItem(`paid_${project?.id}`, 'true');
         }
         setToast({ message: 'Payment confirmed! Unlocking your files...', type: 'success' });
-        if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
-          paymentWindowRef.current.close();
-        }
       } else {
         setToast({ message: 'Could not confirm payment. Please try again.', type: 'error' });
       }
@@ -225,7 +260,6 @@ useEffect(() => {
   };
 
   const handlePayment = async () => {
-
     if (!phoneNumber) return;
     setIsPaying(true);
     setError(null);
@@ -249,7 +283,7 @@ useEffect(() => {
         throw new Error(data.error || 'Payment failed');
       }
 
-      // Save user info for return
+      // Save transaction ID for polling
       if (typeof window !== 'undefined') {
         localStorage.setItem('user_phone', phoneNumber);
         localStorage.setItem('user_email', email);
@@ -257,16 +291,15 @@ useEffect(() => {
           localStorage.setItem(`tx_${project?.id}`, data.transactionId);
         }
       }
-      
-      // Redirect to Paywave hosted payment page
-      if (data.authorization_url) {
-        window.location.href = data.authorization_url;
-        return;
-      }
+
+      // STK Push sent — stay on page, polling useEffect will detect completion
+      setPendingPaymentRef(data.reference || null);
+      setToast({ message: '📱 M-Pesa prompt sent! Check your phone and enter your PIN.', type: 'success' });
+
     } catch (err) {
       console.error('Payment error:', err);
       setError(err.message);
-      setToast({ message: err.message, type: "error" });
+      setToast({ message: err.message, type: 'error' });
       setIsPaying(false);
     }
   };
@@ -582,8 +615,38 @@ useEffect(() => {
                     disabled={isPaying || !phoneNumber || !email}
                     onClick={handlePayment}
                   >
-                    {isPaying ? <Loader2 className="spin" size={20} /> : `Pay & Unlock (KSh ${paymentBreakdown?.total?.toLocaleString()})`}
+                    {isPaying && !pendingPaymentRef ? <Loader2 className="spin" size={20} /> : `Pay & Unlock (KSh ${paymentBreakdown?.total?.toLocaleString()})`}
                   </button>
+
+                  {/* STK Push waiting screen — shown after M-Pesa prompt is sent */}
+                  {isPaying && pendingPaymentRef && (
+                    <div style={{
+                      marginTop: '1.5rem',
+                      padding: '1.5rem',
+                      background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
+                      borderRadius: '16px',
+                      border: '2px solid #86efac',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📱</div>
+                      <h3 style={{ margin: '0 0 0.5rem', color: '#166534', fontSize: '1.1rem' }}>
+                        Check Your Phone!
+                      </h3>
+                      <p style={{ margin: '0 0 1rem', color: '#15803d', fontSize: '0.9rem' }}>
+                        An M-Pesa prompt has been sent to <strong>{phoneNumber}</strong>. Enter your PIN to complete payment.
+                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: '#16a34a', fontSize: '0.85rem' }}>
+                        <Loader2 className="spin" size={16} />
+                        <span>Waiting for payment confirmation...</span>
+                      </div>
+                      <button
+                        onClick={() => { setIsPaying(false); setPendingPaymentRef(null); }}
+                        style={{ marginTop: '1rem', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Cancel and try again
+                      </button>
+                    </div>
+                  )}
 
                   <div className="secure-badges">
                     <span><Shield size={12} /> Secure M-Pesa Payment</span>

@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { calculateCommission } from '../../../lib/commission';
-import { buildPaywavePaymentUrl } from '../../../lib/paywave';
+import { initiatePaywaveDirectStkPush } from '../../../lib/paywave';
 import { getGlobalSettings } from '../../../lib/settings';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   try {
@@ -17,7 +19,7 @@ export async function POST(request) {
     let formattedPhone = phoneNumber.replace(/[\s+]/g, '');
     if (formattedPhone.startsWith('0')) {
       formattedPhone = '254' + formattedPhone.slice(1);
-    } else if (formattedPhone.startsWith('7')) {
+    } else if (formattedPhone.startsWith('7') || formattedPhone.startsWith('1')) {
       formattedPhone = '254' + formattedPhone;
     }
 
@@ -69,26 +71,10 @@ export async function POST(request) {
     // 3. Calculate commission
     const breakdown = calculateCommission(amountToCharge, creatorPlan, customRate);
 
-    // 4. Generate unique reference and build Paywave hosted payment URL
+    // 4. Generate unique reference
     const reference = `LIPA-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
-    
-    // Point callback to our user-facing page — it will confirm with the webhook
-    // and redirect the user back to the product page automatically.
-    // We pre-generate the transaction doc ID placeholder by using reference as key.
-    const callbackUrl = `${baseUrl}/paywave/callback?ref=${reference}&projectId=${projectId}`;
-
-    const authorization_url = buildPaywavePaymentUrl({
-      customerEmail: email,
-      amount: breakdown.total,
-      reference,
-      phoneNumber: formattedPhone,
-      description: project.title || 'Lipapata Digital Content',
-      callbackUrl,
-    });
-
-    // 5. Create a pending transaction record in Firestore
+    // 5. Create a pending transaction record in Firestore FIRST
     const transactionRef = await addDoc(collection(db, 'transactions'), {
       projectId,
       title: project.title || 'Digital Asset',
@@ -109,24 +95,50 @@ export async function POST(request) {
       createdAt: serverTimestamp(),
     });
 
-    // 6. Update the project status
+    // 6. Update the project status to 'paying'
     await updateDoc(projectRef, {
       status: 'paying',
       lastTransactionId: transactionRef.id,
       lastReference: reference,
     });
 
-    // 7. Return the hosted payment URL and transaction ID to the frontend
+    // 7. Initiate the direct STK Push — sends M-Pesa prompt to user's phone
+    console.log(`[PAY] Initiating STK Push for ref=${reference}, phone=${formattedPhone}, amount=${breakdown.total}`);
+    
+    let stkResponse;
+    try {
+      stkResponse = await initiatePaywaveDirectStkPush({
+        email,
+        amount: breakdown.total,
+        phoneNumber: formattedPhone,
+        reference,
+      });
+      console.log('[PAY] STK Push Response:', JSON.stringify(stkResponse));
+    } catch (stkError) {
+      console.error('[PAY] STK Push Error:', stkError);
+      // Clean up — reset project status
+      await updateDoc(projectRef, { status: 'active' });
+      return NextResponse.json({ error: 'Failed to send M-Pesa prompt. Please try again.' }, { status: 500 });
+    }
+
+    // Check if STK push was rejected immediately
+    if (stkResponse && (stkResponse.status === false || stkResponse.success === false)) {
+      await updateDoc(projectRef, { status: 'active' });
+      const errMsg = stkResponse.message || stkResponse.error || 'Failed to initiate payment';
+      return NextResponse.json({ error: errMsg }, { status: 400 });
+    }
+
+    // 8. Return the transaction ID so frontend can poll for status
     return NextResponse.json({
       success: true,
-      authorization_url,
-      reference,
       transactionId: transactionRef.id,
+      reference,
       breakdown,
+      message: 'M-Pesa prompt sent to your phone. Enter your PIN to complete payment.',
     });
 
   } catch (error) {
-    console.error('Payment Error:', error);
+    console.error('[PAY] Payment Error:', error);
     return NextResponse.json(
       { error: error.message || 'Payment processing failed' },
       { status: 500 }
