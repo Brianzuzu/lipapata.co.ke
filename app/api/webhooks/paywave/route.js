@@ -84,7 +84,13 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const payload = await request.json();
-    const { reference, status, transaction_id } = payload;
+    
+    // PayWave sends PascalCase keys in their payload (e.g., TransactionReference, TransactionReceipt)
+    const reference = payload.reference || payload.TransactionReference || payload.transaction_reference;
+    const status = payload.status || payload.Status || payload.TransactionStatus || payload.ResultCode || payload.ResultDescription || 'success';
+    const transaction_id = payload.transaction_id || payload.TransactionReceipt || payload.transaction_receipt;
+
+    console.log('PayWave Webhook Payload received:', JSON.stringify(payload));
 
     const result = await handlePaywaveConfirmation(reference, status, transaction_id);
 
