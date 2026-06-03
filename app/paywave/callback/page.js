@@ -14,6 +14,7 @@ export default function PaywaveCallbackPage() {
       const searchParams = new URLSearchParams(window.location.search);
       const ref = searchParams.get('ref');
       const paymentStatus = searchParams.get('status');
+      const projectId = searchParams.get('projectId');
       const txId = searchParams.get('transaction_id') || searchParams.get('txid');
 
       if (!ref) {
@@ -30,7 +31,6 @@ export default function PaywaveCallbackPage() {
         if (txId) webhookUrl.searchParams.append('transaction_id', txId);
 
         // Call the webhook to confirm the payment and update the transaction in Firebase
-        // The webhook will process the payment regardless of the response status
         await fetch(webhookUrl.toString(), {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
@@ -40,40 +40,25 @@ export default function PaywaveCallbackPage() {
         await new Promise(resolve => setTimeout(resolve, 500));
 
         setStatus('success');
-        setMessage('Payment confirmed successfully!');
+        setMessage('Payment confirmed successfully! Redirecting to download...');
 
-        // Notify the parent window of the successful payment
-        if (window.opener) {
-          window.opener.postMessage({ type: 'PAYWAVE_SUCCESS', reference: ref }, location.origin);
-        }
-
-        // Close the popup after a short delay
+        // Redirect back to the product page so auto-download triggers
         setTimeout(() => {
-          window.close();
-        }, 1500);
+          if (projectId) {
+            window.location.href = `/p/${projectId}`;
+          } else {
+            window.location.href = '/';
+          }
+        }, 2000);
       } catch (error) {
         console.error('Payment confirmation error:', error);
         setStatus('error');
-        setMessage('Failed to confirm payment. Please refresh the page.');
-
-        // Still notify parent in case it was processed on PayWave's end
-        if (window.opener && ref) {
-          window.opener.postMessage({ type: 'PAYWAVE_SUCCESS', reference: ref }, location.origin);
-        }
-
-        // Try to close anyway
-        setTimeout(() => {
-          window.close();
-        }, 3000);
+        setMessage('Failed to confirm payment. You can retry by refreshing.');
       }
     };
 
     confirmPayment();
   }, []);
-
-  const handleManualClose = () => {
-    window.close();
-  };
 
   const getStatusIcon = () => {
     switch(status) {
@@ -120,20 +105,6 @@ export default function PaywaveCallbackPage() {
         {status === 'processing' && 'Processing Payment...'}
       </h2>
       <p style={{ opacity: 0.7, marginBottom: '1.5rem' }}>{message}</p>
-      {status !== 'processing' && (
-        <button onClick={handleManualClose} style={{
-          marginTop: '1rem',
-          padding: '0.8rem 1.5rem',
-          background: getStatusColor(),
-          color: '#fff',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          fontSize: '1rem',
-        }}>
-          Close Window
-        </button>
-      )}
     </div>
   );
 }

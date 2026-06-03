@@ -72,7 +72,7 @@ export async function POST(request) {
     // 4. Generate unique reference and build Paywave hosted payment URL
     const reference = `LIPA-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
     const callbackUrl = `${baseUrl}/api/webhooks/paywave?ref=${reference}`;
 
     const authorization_url = buildPaywavePaymentUrl({

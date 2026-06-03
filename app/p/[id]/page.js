@@ -34,8 +34,6 @@ export default function ProjectPreview({ params }) {
   const [isBlurred, setIsBlurred] = useState(false);
   const [previewStarted, setPreviewStarted] = useState(false);
   const [globalSettings, setGlobalSettings] = useState(null);
-  const [transactionId, setTransactionId] = useState(null);
-const paymentWindowRef = useRef(null);
   const [email, setEmail] = useState('');
   const router = useRouter();
   const [customPrice, setCustomPrice] = useState('');
@@ -44,9 +42,6 @@ const paymentWindowRef = useRef(null);
   const [discountError, setDiscountError] = useState('');
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [toast, setToast] = useState(null);
-const [autoDownloaded, setAutoDownloaded] = useState(false);
-const [pendingPaymentRef, setPendingPaymentRef] = useState(null);
-const [isConfirming, setIsConfirming] = useState(false);
 
 
   useEffect(() => {
@@ -145,29 +140,9 @@ if (typeof window !== 'undefined') {
     }
   }, [project, globalSettings, customPrice, appliedDiscount]);
 
-// Listen for payment success signal from the PayWave callback popup window
-useEffect(() => {
-  const handleMessage = (event) => {
-    if (event.origin !== window.location.origin) return;
-    if (event.data?.type === 'PAYWAVE_SUCCESS') {
-      setIsPaid(true);
-      setIsPaying(false);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(`paid_${project?.id}`, 'true');
-      }
-      setToast({ message: "Payment confirmed! Unlocking your files...", type: "success" });
-      if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
-        paymentWindowRef.current.close();
-      }
-    }
-  };
-  window.addEventListener('message', handleMessage);
-  return () => window.removeEventListener('message', handleMessage);
-}, [project]);
-
 // Auto‑download files once payment is confirmed
 useEffect(() => {
-  if (isPaid && !autoDownloaded && transactionId && project) {
+  if (isPaid && project) {
     const filesToDownload = project.files && project.files.length > 0
       ? project.files
       : [{ fileName: project.fileName, originalUrl: project.originalUrl }];
@@ -175,7 +150,7 @@ useEffect(() => {
     filesToDownload.forEach(async (f, idx) => {
       const safeName = (f.fileName || project.title || `file_${idx}`).replace(/[^a-z0-9.]/gi, '_');
       try {
-        const downloadUrl = `/api/download/${project.id}?t=${transactionId}${project.files && project.files.length > 0 ? `&index=${idx}` : ''}`;
+        const downloadUrl = `/api/download/${project.id}${project.files && project.files.length > 0 ? `?index=${idx}` : ''}`;
         const response = await fetch(downloadUrl);
         if (!response.ok) {
           const errData = await response.json();
@@ -194,9 +169,8 @@ useEffect(() => {
         console.error('Auto‑download error:', err);
       }
     });
-    setAutoDownloaded(true);
   }
-}, [isPaid, transactionId, project, autoDownloaded]);
+}, [isPaid, project]);
 
   useEffect(() => {
     if (project?.uid) {
@@ -274,95 +248,18 @@ useEffect(() => {
         throw new Error(data.error || 'Payment failed');
       }
 
-      // Open PayWave hosted page in a popup window so customer can complete payment
-      if (data.authorization_url) {
-        // Note: no 'noopener' so the callback page can signal us via postMessage
-        const pwWindow = window.open(data.authorization_url, 'paywave_payment', 'width=500,height=700');
-        paymentWindowRef.current = pwWindow;
+      // Save user info for return
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user_phone', phoneNumber);
+        localStorage.setItem('user_email', email);
+        localStorage.setItem(`paid_${project?.id}`, 'true');
       }
-
-      // Store the reference so the "I've Paid" button can confirm it
-      setPendingPaymentRef(data.reference);
-      setToast({ message: 'Complete payment in the popup, then click "I\'ve Paid" below.', type: 'info' });
-      setTransactionId(data.transactionId);
       
-      // Poll for transaction status via the new API route
-      const pollTransaction = async () => {
-        let stopped = false;
-
-        const checkStatus = async () => {
-          if (stopped) return true;
-          try {
-            const statusRes = await fetch(`/api/pay/status?transactionId=${data.transactionId}`);
-            if (statusRes.ok) {
-              const statusData = await statusRes.json();
-              if (statusData.status === 'completed') {
-                stopped = true;
-                setIsPaid(true);
-                setIsPaying(false);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem(`paid_${project?.id}`, 'true');
-                }
-                setToast({ message: "Payment confirmed! Unlocking your files...", type: "success" });
-                // Close popup if still open
-                if (paymentWindowRef.current && !paymentWindowRef.current.closed) {
-                  paymentWindowRef.current.close();
-                }
-                return true;
-              } else if (statusData.status === 'failed') {
-                stopped = true;
-                setError(`Payment failed. Please try again.`);
-                setToast({ message: "Payment failed or cancelled.", type: "error" });
-                setIsPaying(false);
-                return true;
-              }
-            }
-            return false;
-          } catch (err) {
-            console.error("Polling error:", err);
-            return false;
-          }
-        };
-
-        // Poll every 2 seconds
-        const interval = setInterval(async () => {
-          const finished = await checkStatus();
-          if (finished) {
-            clearInterval(interval);
-            clearInterval(windowWatcher);
-          }
-        }, 2000);
-
-        // Also watch for the PayWave popup closing — when it closes, do an immediate check
-        const windowWatcher = setInterval(async () => {
-          if (paymentWindowRef.current && paymentWindowRef.current.closed) {
-            clearInterval(windowWatcher);
-            // Popup closed — check status immediately a few times
-            for (let i = 0; i < 5; i++) {
-              await new Promise(r => setTimeout(r, 2000));
-              const finished = await checkStatus();
-              if (finished) {
-                clearInterval(interval);
-                break;
-              }
-            }
-          }
-        }, 1000);
-
-        // Timeout after 3 minutes
-        setTimeout(() => {
-          if (!stopped) {
-            clearInterval(interval);
-            clearInterval(windowWatcher);
-            setError("Payment confirmation timed out. If you've paid, please refresh the page.");
-            setToast({ message: "Timed out waiting for confirmation. Please refresh.", type: "error" });
-            setIsPaying(false);
-          }
-        }, 180000);
-      };
-
-      pollTransaction();
-
+      // Redirect to Paywave hosted payment page
+      if (data.authorization_url) {
+        window.location.href = data.authorization_url;
+        return;
+      }
     } catch (err) {
       console.error('Payment error:', err);
       setError(err.message);
@@ -681,33 +578,6 @@ useEffect(() => {
                   >
                     {isPaying ? <Loader2 className="spin" size={20} /> : `Pay & Unlock (KSh ${paymentBreakdown?.total?.toLocaleString()})`}
                   </button>
-
-                  {/* Show "I've Paid" button after popup opens */}
-                  {isPaying && pendingPaymentRef && (
-                    <button
-                      onClick={handleConfirmPayment}
-                      disabled={isConfirming}
-                      style={{
-                        marginTop: '0.75rem',
-                        width: '100%',
-                        padding: '0.85rem',
-                        background: isConfirming ? '#6b7280' : '#10b981',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '10px',
-                        fontWeight: '700',
-                        fontSize: '1rem',
-                        cursor: isConfirming ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                      }}
-                    >
-                      {isConfirming ? <Loader2 className="spin" size={18} /> : '✓'}
-                      {isConfirming ? 'Confirming payment...' : "I've Paid — Unlock My Files"}
-                    </button>
-                  )}
 
                   <div className="secure-badges">
                     <span><Shield size={12} /> Secure M-Pesa Payment</span>

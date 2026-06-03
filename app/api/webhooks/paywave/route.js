@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '../../../../lib/firebase';
-import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp, increment } from 'firebase/firestore';
 
 /**
  * Paywave Express Payment Webhook / Callback
@@ -31,7 +31,8 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
     await updateDoc(doc(db, 'transactions', transactionDoc.id), {
       status: 'completed',
       paywaveTransactionId: paywaveTransactionId || null,
-      paidAt: new Date().toISOString(),
+      paidAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
 
     // Mark the associated project as paid/active
@@ -39,16 +40,30 @@ async function handlePaywaveConfirmation(reference, status, paywaveTransactionId
       const projectRef = doc(db, 'projects', transactionData.projectId);
       await updateDoc(projectRef, {
         status: 'paid',
-        paidAt: new Date().toISOString(),
+        paidAt: serverTimestamp(),
+        sales: increment(1),
+        lastUpdated: serverTimestamp(),
       });
     }
 
+    // 🔥 UPDATE CREATOR'S BALANCE (This was missing!)
+    const creatorRef = doc(db, 'users', transactionData.creatorUid);
+    const earnings = transactionData.creatorEarnings || 0;
+    
+    await updateDoc(creatorRef, {
+      balance: increment(earnings),
+      totalSales: increment(1)
+    });
+
+    console.log(`✅ Payment Successful for Reference: ${transactionData.reference}. Creator earnings KSh ${earnings} added.`);
     return { ok: true, message: 'Transaction completed', projectId: transactionData.projectId };
   } else {
     await updateDoc(doc(db, 'transactions', transactionDoc.id), {
       status: 'failed',
       failureReason: status || 'Payment failed',
+      updatedAt: serverTimestamp(),
     });
+    console.log(`❌ Payment Failed for Reference: ${transactionData.reference}`);
     return { ok: false, message: 'Payment failed', projectId: transactionData.projectId };
   }
 }
@@ -66,16 +81,16 @@ export async function GET(request) {
     projectId = result.projectId || '';
 
     // Redirect customer to their download/success page
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
     const isSuccess = !status || status === 'success' || status === 'successful' || status === 'completed';
     const redirectUrl = isSuccess
-      ? `${baseUrl}/paywave/callback?ref=${reference}&status=success`
-      : `${baseUrl}/paywave/callback?ref=${reference}&status=failed`;
+      ? `${baseUrl}/paywave/callback?ref=${reference}&status=success&projectId=${projectId}`
+      : `${baseUrl}/paywave/callback?ref=${reference}&status=failed&projectId=${projectId}`;
 
     return NextResponse.redirect(redirectUrl);
   } catch (error) {
     console.error('Paywave GET Webhook Error:', error);
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
     return NextResponse.redirect(projectId ? `${baseUrl}/p/${projectId}?error=server_error` : `${baseUrl}/login`);
   }
 }
