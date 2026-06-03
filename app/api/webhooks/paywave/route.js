@@ -85,12 +85,21 @@ export async function POST(request) {
   try {
     const payload = await request.json();
     
-    // PayWave sends PascalCase keys in their payload (e.g., TransactionReference, TransactionReceipt)
-    const reference = payload.reference || payload.TransactionReference || payload.transaction_reference;
-    const status = payload.status || payload.Status || payload.TransactionStatus || payload.ResultCode || payload.ResultDescription || 'success';
-    const transaction_id = payload.transaction_id || payload.TransactionReceipt || payload.transaction_receipt;
-
     console.log('PayWave Webhook Payload received:', JSON.stringify(payload));
+
+    // PayWave sends PascalCase keys. Reference is in TransactionReference.
+    // ResponseCode: 0 means success (NOT a truthy value — use explicit check!)
+    const reference = payload.reference || payload.TransactionReference || payload.transaction_reference;
+    const transaction_id = payload.TransactionReceipt || payload.TransactionID || payload.transaction_id;
+
+    // ResponseCode of 0 OR ResponseDescription of "Success" means payment succeeded
+    const responseCode = payload.ResponseCode ?? payload.ResultCode;
+    const responseDesc = (payload.ResponseDescription || payload.ResultDesc || payload.status || '').toLowerCase();
+    const isSuccess = responseCode === 0 || responseCode === '0' ||
+      responseDesc.includes('success') ||
+      payload.TransactionStatus === 'Completed';
+
+    const status = isSuccess ? 'success' : 'failed';
 
     const result = await handlePaywaveConfirmation(reference, status, transaction_id);
 

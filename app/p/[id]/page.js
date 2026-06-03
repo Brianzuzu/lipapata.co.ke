@@ -224,9 +224,13 @@ useEffect(() => {
         throw new Error(data.error || 'Payment failed');
       }
 
-      // Show the message returned from the API (usually "Please enter your MPESA PIN...")
-      setToast({ message: data.message || 'Please check your phone for the M-Pesa prompt.', type: 'info' });
+      // Open PayWave hosted page in a popup window so customer can complete payment
+      if (data.authorization_url) {
+        const pwWindow = window.open(data.authorization_url, '_blank', 'width=500,height=700,noopener');
+        paymentWindowRef.current = pwWindow;
+      }
 
+      setToast({ message: 'Please complete the payment on the PayWave window that just opened.', type: 'info' });
       setTransactionId(data.transactionId);
       
       // Poll for transaction status via the new API route
