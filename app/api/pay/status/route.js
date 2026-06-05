@@ -39,16 +39,18 @@ export async function GET(request) {
       return NextResponse.json({ status });
     }
 
-    // Still pending — actively check with Paywave, BUT only after 20 seconds.
+    // Still pending — actively check with Paywave, BUT only after 20 seconds
+    // UNLESS the client sends forceCheck=true (e.g. user pressed "I've Paid" button).
     // Calling tstatus on a brand-new transaction (within the first ~15s while
     // the user is entering their PIN) can return a response we misread as failure.
     // The Paywave webhook handles the happy path. We only need tstatus as a fallback
     // for when the webhook is delayed or missed.
+    const forceCheck = searchParams.get('forceCheck') === 'true';
     const txReqId = transaction.transactionRequestId;
     const createdAt = transaction.createdAt?.toDate?.() || null;
     const ageSeconds = createdAt ? (Date.now() - createdAt.getTime()) / 1000 : 999;
 
-    if (txReqId && ageSeconds >= 20) {
+    if (txReqId && (forceCheck || ageSeconds >= 20)) {
       try {
         console.log(`[STATUS] Checking Paywave API for transactionRequestId=${txReqId} (age=${Math.round(ageSeconds)}s)`);
         const apiRes = await checkPaywaveTransactionStatus(txReqId);
