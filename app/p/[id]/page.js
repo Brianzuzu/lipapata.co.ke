@@ -310,7 +310,10 @@ if (typeof window !== 'undefined') {
       const res = await fetch(`/api/pay/status?transactionId=${txId}&forceCheck=true`);
       if (res.ok) {
         const data = await res.json();
+        console.log("PAYWAVE RAW RESPONSE (forceCheck):", data);
+        
         if (data.status === 'completed' || data.status === 'success') {
+
           setIsPaid(true);
           setIsPaying(false);
           setPendingPaymentRef(null);

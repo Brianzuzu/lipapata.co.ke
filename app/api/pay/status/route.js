@@ -116,8 +116,13 @@ export async function GET(request) {
           status = 'failed';
         }
         // If neither, Paywave hasn't received a final answer yet — stay 'pending'
+        
+        if (forceCheck) {
+           return NextResponse.json({ status, rawPaywaveRes: apiRes });
+        }
 
       } catch (apiErr) {
+
         // Don't crash — just return the current Firestore status
         console.error('[STATUS] Paywave API check failed:', apiErr);
       }
