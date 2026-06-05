@@ -131,7 +131,11 @@ export async function GET(request) {
 
             let isApiSuccess = false;
             if (apiRes) {
-              const code = apiRes.ResultCode !== undefined ? apiRes.ResultCode : apiRes.resultCode;
+              let code = apiRes.ResultCode ?? apiRes.resultCode;
+              if (code === undefined && apiRes.data) code = apiRes.data.ResultCode ?? apiRes.data.resultCode;
+              if (code === undefined && apiRes.Body?.stkCallback) code = apiRes.Body.stkCallback.ResultCode ?? apiRes.Body.stkCallback.resultCode;
+              if (code === undefined && apiRes.data?.Body?.stkCallback) code = apiRes.data.Body.stkCallback.ResultCode ?? apiRes.data.Body.stkCallback.resultCode;
+
               if (code !== undefined) {
                 isApiSuccess = (code === 0 || code === '0' || code === '00' || code === 200 || code === '200');
               } else {
@@ -257,10 +261,14 @@ export async function POST(request) {
     console.log(`[PAYWAVE POST] reference="${reference}", responseCode="${responseCode}", responseDesc="${responseDesc}"`);
 
     let isSuccess = false;
-    const hasResultCode = payload.ResultCode !== undefined || payload.resultCode !== undefined;
+    let code = payload.ResultCode ?? payload.resultCode;
+    if (code === undefined && payload.data) code = payload.data.ResultCode ?? payload.data.resultCode;
+    if (code === undefined && payload.Body?.stkCallback) code = payload.Body.stkCallback.ResultCode ?? payload.Body.stkCallback.resultCode;
+    if (code === undefined && payload.data?.Body?.stkCallback) code = payload.data.Body.stkCallback.ResultCode ?? payload.data.Body.stkCallback.resultCode;
+
+    const hasResultCode = code !== undefined;
     
     if (hasResultCode) {
-      const code = payload.ResultCode ?? payload.resultCode;
       isSuccess = (code === 0 || code === '0' || code === '00' || code === 200 || code === '200');
     } else {
       isSuccess = 

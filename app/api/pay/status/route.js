@@ -40,7 +40,12 @@ export async function GET(request) {
 
         let isApiSuccess = false;
         if (apiRes) {
-          const code = apiRes.ResultCode !== undefined ? apiRes.ResultCode : apiRes.resultCode;
+          // Deep search for ResultCode (M-Pesa wraps it in Body.stkCallback or PayWave wraps in data)
+          let code = apiRes.ResultCode ?? apiRes.resultCode;
+          if (code === undefined && apiRes.data) code = apiRes.data.ResultCode ?? apiRes.data.resultCode;
+          if (code === undefined && apiRes.Body?.stkCallback) code = apiRes.Body.stkCallback.ResultCode ?? apiRes.Body.stkCallback.resultCode;
+          if (code === undefined && apiRes.data?.Body?.stkCallback) code = apiRes.data.Body.stkCallback.ResultCode ?? apiRes.data.Body.stkCallback.resultCode;
+
           if (code !== undefined) {
             isApiSuccess = (code === 0 || code === '0' || code === '00' || code === 200 || code === '200');
           } else {
