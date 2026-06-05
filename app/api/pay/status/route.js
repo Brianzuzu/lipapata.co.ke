@@ -39,11 +39,18 @@ export async function GET(request) {
       return NextResponse.json({ status });
     }
 
-    // Still pending — actively check with Paywave if we have a request ID
+    // Still pending — actively check with Paywave, BUT only after 20 seconds.
+    // Calling tstatus on a brand-new transaction (within the first ~15s while
+    // the user is entering their PIN) can return a response we misread as failure.
+    // The Paywave webhook handles the happy path. We only need tstatus as a fallback
+    // for when the webhook is delayed or missed.
     const txReqId = transaction.transactionRequestId;
-    if (txReqId) {
+    const createdAt = transaction.createdAt?.toDate?.() || null;
+    const ageSeconds = createdAt ? (Date.now() - createdAt.getTime()) / 1000 : 999;
+
+    if (txReqId && ageSeconds >= 20) {
       try {
-        console.log(`[STATUS] Checking Paywave API for transactionRequestId=${txReqId}`);
+        console.log(`[STATUS] Checking Paywave API for transactionRequestId=${txReqId} (age=${Math.round(ageSeconds)}s)`);
         const apiRes = await checkPaywaveTransactionStatus(txReqId);
         console.log(`[STATUS] Paywave API response:`, JSON.stringify(apiRes));
 
@@ -53,16 +60,19 @@ export async function GET(request) {
 
         // Paywave wraps the Safaricom STK callback inside the response
         let code;
-        if (apiRes?.ResultCode !== undefined)                              code = apiRes.ResultCode;
-        else if (apiRes?.resultCode !== undefined)                         code = apiRes.resultCode;
-        else if (apiRes?.data?.ResultCode !== undefined)                   code = apiRes.data.ResultCode;
-        else if (apiRes?.Body?.stkCallback?.ResultCode !== undefined)      code = apiRes.Body.stkCallback.ResultCode;
+        if (apiRes?.ResultCode !== undefined)                               code = apiRes.ResultCode;
+        else if (apiRes?.resultCode !== undefined)                          code = apiRes.resultCode;
+        else if (apiRes?.data?.ResultCode !== undefined)                    code = apiRes.data.ResultCode;
+        else if (apiRes?.Body?.stkCallback?.ResultCode !== undefined)       code = apiRes.Body.stkCallback.ResultCode;
         else if (apiRes?.data?.Body?.stkCallback?.ResultCode !== undefined) code = apiRes.data.Body.stkCallback.ResultCode;
 
         if (code !== undefined) {
           const codeNum = Number(code);
           isSuccess = codeNum === 0;
-          isFailed  = !isSuccess; // any non-zero result code means failure/cancel
+          // Only mark failed for definitive Safaricom failure codes.
+          // Don't treat "still processing" non-zero codes as failure.
+          const DEFINITIVE_FAILURE_CODES = [1, 2001, 1032, 1037, 1025, 1019];
+          isFailed = DEFINITIVE_FAILURE_CODES.includes(codeNum);
         } else {
           // No ResultCode — fall back to string-based heuristics
           const raw = JSON.stringify(apiRes || '').toLowerCase();

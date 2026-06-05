@@ -339,6 +339,12 @@ if (typeof window !== 'undefined') {
     setPaymentFailedMsg('');
     setError(null);
 
+    // Clear any stale transaction from a previous attempt so the poller
+    // doesn't immediately pick it up and show a false "payment not completed" modal.
+    if (typeof window !== 'undefined' && project?.id) {
+      localStorage.removeItem(`tx_${project.id}`);
+    }
+
     try {
       const response = await fetch('/api/pay', {
         method: 'POST',
