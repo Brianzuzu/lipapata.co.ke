@@ -49,10 +49,6 @@ export async function GET(request) {
           apiRes.ResultCode === '200' ||
           apiRes.ResultCode === 200 ||
           apiRes.success === true ||
-          apiRes.ResponseCode === '00' ||
-          apiRes.ResponseCode === '0' ||
-          apiRes.ResponseCode === '200' ||
-          apiRes.ResponseCode === 200 ||
           (apiRes.ResultDesc && apiRes.ResultDesc.toLowerCase().includes('success'))
         );
 

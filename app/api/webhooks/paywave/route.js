@@ -139,9 +139,7 @@ export async function GET(request) {
               apiRes.resultCode === '0' ||
               apiRes.ResultCode === '0' ||
               apiRes.ResultCode === 0 ||
-              apiRes.success === true ||
-              apiRes.ResponseCode === '00' ||
-              apiRes.ResponseCode === '0'
+              apiRes.success === true
             );
 
             if (isApiSuccess) {
@@ -240,12 +238,12 @@ export async function POST(request) {
       payload.receipt ||
       payload.mpesa_receipt;
 
-    // Try every possible field name for the status/result
+    // Try every possible field name for the status/result. Priority is ResultCode (payment outcome)
     const responseCode = 
-      payload.ResponseCode ?? 
       payload.ResultCode ?? 
+      payload.resultCode ?? 
+      payload.ResponseCode ?? 
       payload.responseCode ?? 
-      payload.resultCode ??
       payload.code;
 
     const responseDesc = (
