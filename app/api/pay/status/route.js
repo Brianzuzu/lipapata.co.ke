@@ -50,9 +50,10 @@ export async function GET(request) {
     const createdAt = transaction.createdAt?.toDate?.() || null;
     const ageSeconds = createdAt ? (Date.now() - createdAt.getTime()) / 1000 : 999;
 
-    if (txReqId && (forceCheck || ageSeconds >= 20)) {
+    if (txReqId && (forceCheck || ageSeconds >= 10)) {
       try {
-        console.log(`[STATUS] Checking Paywave API for transactionRequestId=${txReqId} (age=${Math.round(ageSeconds)}s)`);
+        console.log(`[STATUS] Checking Paywave API for transactionRequestId=${txReqId} (age=${Math.round(ageSeconds)}s, forceCheck=${forceCheck})`);
+
         const apiRes = await checkPaywaveTransactionStatus(txReqId);
         console.log(`[STATUS] Paywave API response:`, JSON.stringify(apiRes));
 
