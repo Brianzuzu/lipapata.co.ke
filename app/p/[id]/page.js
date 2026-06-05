@@ -731,8 +731,26 @@ if (typeof window !== 'undefined') {
                       >
                         Try Again
                       </button>
+                      {/* Support note — shown only on timeout, not on clean cancel/fail */}
+                      {paymentFailedMsg?.includes('expired') && (
+                        <p style={{ margin: '1rem 0 0', color: '#9f1239', fontSize: '0.75rem', lineHeight: 1.5 }}>
+                          💸 If M-Pesa deducted money but you can't download,{' '}
+                          <a
+                            href={`https://wa.me/254${(typeof window !== 'undefined' ? localStorage.getItem('user_phone') || '' : '').replace(/^(0|254|\+254)/, '')}`}
+                            style={{ color: '#be123c', fontWeight: 'bold' }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              window.open(`https://wa.me/254700000000?text=Hi%2C%20I%20paid%20on%20Lipapata%20but%20couldn%27t%20download.%20My%20email%3A%20${encodeURIComponent(typeof window !== 'undefined' ? localStorage.getItem('user_email') || '' : '')}`, '_blank');
+                            }}
+                          >
+                            contact support
+                          </a>{' '}
+                          with your M-Pesa transaction code and we'll sort it out immediately.
+                        </p>
+                      )}
                     </div>
                   )}
+
 
                   {/* STK Push waiting screen — shown after M-Pesa prompt is sent */}
                   {isPaying && pendingPaymentRef && (
