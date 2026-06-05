@@ -38,11 +38,9 @@ export async function handlePaywaveConfirmation(reference, status, paywaveTransa
   }
 
   const normalizedStatus = (status || '').toString().toLowerCase().trim();
-  const isSuccess = !status || 
-                    normalizedStatus === 'success' || 
+  const isSuccess = normalizedStatus === 'success' || 
                     normalizedStatus === 'successful' || 
                     normalizedStatus === 'completed' || 
-                    normalizedStatus === '0' ||
                     normalizedStatus === 'approved' ||
                     normalizedStatus === 'paid';
 
@@ -138,8 +136,7 @@ export async function GET(request) {
               apiRes.resultCode === 0 || 
               apiRes.resultCode === '0' ||
               apiRes.ResultCode === '0' ||
-              apiRes.ResultCode === 0 ||
-              apiRes.success === true
+              apiRes.ResultCode === 0
             );
 
             if (isApiSuccess) {
@@ -180,7 +177,6 @@ export async function GET(request) {
                       normalizedStatus === 'success' || 
                       normalizedStatus === 'successful' || 
                       normalizedStatus === 'completed' || 
-                      normalizedStatus === '0' ||
                       normalizedStatus === 'approved';
 
     const redirectUrl = isSuccess
