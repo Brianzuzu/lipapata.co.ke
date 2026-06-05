@@ -740,7 +740,7 @@ if (typeof window !== 'undefined') {
                             style={{ color: '#be123c', fontWeight: 'bold' }}
                             onClick={(e) => {
                               e.preventDefault();
-                              window.open(`https://wa.me/254700000000?text=Hi%2C%20I%20paid%20on%20Lipapata%20but%20couldn%27t%20download.%20My%20email%3A%20${encodeURIComponent(typeof window !== 'undefined' ? localStorage.getItem('user_email') || '' : '')}`, '_blank');
+                              window.open(`https://wa.me/254759221095?text=Hi%2C%20I%20paid%20on%20Lipapata%20but%20couldn%27t%20download.%20My%20email%3A%20${encodeURIComponent(typeof window !== 'undefined' ? localStorage.getItem('user_email') || '' : '')}`, '_blank');
                             }}
                           >
                             contact support
