@@ -60,6 +60,11 @@ export async function GET(request) {
           const verifiedTxId = apiRes.transaction_id || apiRes.transactionId || apiRes.Receipt || 'PWX-VERIFIED';
           await handlePaywaveConfirmation(transaction.reference, 'success', verifiedTxId);
           status = 'completed';
+        } else if (apiRes && (apiRes.ResultCode || apiRes.resultCode || apiRes.ResponseCode || (apiRes.status && apiRes.status === 'failed'))) {
+          // If PayWave API returns a definitive result code that isn't success, mark as failed
+          console.log(`[STATUS CHECK] Transaction failed. API Response:`, apiRes);
+          await handlePaywaveConfirmation(transaction.reference, 'failed', null);
+          status = 'failed';
         }
       } catch (apiErr) {
         console.error('[STATUS CHECK] PayWave API status check failed:', apiErr);
