@@ -167,7 +167,8 @@ if (typeof window !== 'undefined') {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [project, isPaid]);
+  // pendingPaymentRef is included so polling starts the moment the STK push response arrives
+  }, [project, isPaid, pendingPaymentRef]);
 
   // STK countdown timer — auto-expire after 2 minutes if no payment received
   useEffect(() => {

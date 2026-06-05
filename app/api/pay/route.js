@@ -116,6 +116,7 @@ export async function POST(request) {
       console.log('[PAY] STK Push Response:', JSON.stringify(stkResponse));
       
       // Update transaction with the Paywave request ID
+      // Paywave returns: { ResponseCode: "0", success: "200", transaction_request_id: "FCID...", ... }
       const txReqId = stkResponse?.transaction_request_id || stkResponse?.id || stkResponse?.TransactionId || null;
       await updateDoc(transactionRef, {
         transactionRequestId: txReqId,
@@ -128,10 +129,18 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Failed to send M-Pesa prompt. Please try again.' }, { status: 500 });
     }
 
-    // Check if STK push was rejected immediately
-    if (stkResponse && (stkResponse.status === false || stkResponse.success === false)) {
+    // Check if STK push was rejected immediately.
+    // Paywave success = ResponseCode "0" (string). Failure = any other code, or explicit error fields.
+    const stkResponseCode = stkResponse?.ResponseCode ?? stkResponse?.responseCode;
+    const stkFailed =
+      stkResponse?.status === false ||
+      (stkResponseCode !== undefined && stkResponseCode !== '0' && stkResponseCode !== 0) ||
+      (stkResponse?.message && !stkResponse?.transaction_request_id &&
+        !String(stkResponse?.message).toLowerCase().includes('please enter'));
+
+    if (stkFailed) {
       await updateDoc(projectRef, { status: 'active' });
-      const errMsg = stkResponse.message || stkResponse.error || 'Failed to initiate payment';
+      const errMsg = stkResponse?.message || stkResponse?.error || 'Failed to initiate payment';
       return NextResponse.json({ error: errMsg }, { status: 400 });
     }
 
