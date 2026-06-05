@@ -15,7 +15,7 @@ export default function PaywaveCallbackPage() {
       // PayWave may send status as "success", "failed", "0", etc.
       const paymentStatus = searchParams.get('status') || searchParams.get('Status');
       const projectId = searchParams.get('projectId');
-      const txId = searchParams.get('transaction_id') || searchParams.get('txid') || searchParams.get('TransactionID');
+      const txId = searchParams.get('transaction_id') || searchParams.get('txid') || searchParams.get('TransactionID') || searchParams.get('txId');
 
       if (!ref) {
         // No ref — try to recover using localStorage
@@ -33,24 +33,39 @@ export default function PaywaveCallbackPage() {
       }
 
       try {
-        setMessage('Confirming your payment with our server...');
+        setMessage('Confirming your payment...');
 
-        // Call our webhook to confirm and mark the transaction as completed
-        const webhookUrl = `/api/webhooks/paywave?ref=${encodeURIComponent(ref)}${paymentStatus ? `&status=${encodeURIComponent(paymentStatus)}` : ''}${txId ? `&transaction_id=${encodeURIComponent(txId)}` : ''}`;
-        
-        const res = await fetch(webhookUrl, { method: 'GET' });
-
-        // Give the webhook a moment to process Firestore updates
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Mark as paid in localStorage so the product page unlocks immediately
+        // The webhook has already run before PayWave redirected here.
+        // We trust the status + txId already embedded in this URL by the webhook redirect.
+        // Just save them to localStorage so the product page can unlock the download.
         const targetProjectId = projectId;
-        if (targetProjectId) {
+        const isSuccess = paymentStatus === 'success' || paymentStatus === 'completed';
+
+        if (targetProjectId && isSuccess) {
           localStorage.setItem(`paid_${targetProjectId}`, 'true');
+          // txId is passed by the webhook redirect — required for /api/download verification
+          if (txId) {
+            localStorage.setItem(`tx_${targetProjectId}`, txId);
+          }
         }
 
-        setStatus('success');
-        setMessage('Payment confirmed! Taking you to your download...');
+        if (isSuccess) {
+          setStatus('success');
+          setMessage('Payment confirmed! Taking you to your download...');
+        } else if (paymentStatus === 'failed') {
+          // Clean up localStorage so a retry starts fresh
+          if (targetProjectId) {
+            localStorage.removeItem(`tx_${targetProjectId}`);
+            localStorage.removeItem(`paid_${targetProjectId}`);
+          }
+          setStatus('error');
+          setMessage('Payment was not completed. Please go back and try again.');
+          return;
+        } else {
+          // Unknown status — still redirect, polling on the product page will resolve it
+          setStatus('success');
+          setMessage('Redirecting you back...');
+        }
 
         // Redirect back to product page
         setTimeout(() => {
@@ -63,8 +78,6 @@ export default function PaywaveCallbackPage() {
 
       } catch (error) {
         console.error('Payment confirmation error:', error);
-        // Even if webhook call fails, try to redirect back to product page
-        // The background polling on the product page will pick up the status
         if (projectId) {
           setMessage('Redirecting you back. Your download should unlock shortly...');
           setTimeout(() => {
@@ -137,6 +150,29 @@ export default function PaywaveCallbackPage() {
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
         }} />
+      )}
+      {status === 'error' && (
+        <button
+          onClick={() => {
+            const searchParams = new URLSearchParams(window.location.search);
+            const projectId = searchParams.get('projectId');
+            window.location.href = projectId ? `/p/${projectId}` : '/';
+          }}
+          style={{
+            marginTop: '1.5rem',
+            background: '#ef4444',
+            color: 'white',
+            border: 'none',
+            padding: '0.8rem 2rem',
+            borderRadius: '12px',
+            fontSize: '0.95rem',
+            fontWeight: '700',
+            cursor: 'pointer',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          ← Go Back &amp; Try Again
+        </button>
       )}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  *  - POST: background server-to-server payment notification from Paywave
  */
 
-async function handlePaywaveConfirmation(reference, status, paywaveTransactionId) {
+export async function handlePaywaveConfirmation(reference, status, paywaveTransactionId) {
   console.log(`[PAYWAVE] handlePaywaveConfirmation called: ref=${reference}, status=${status}, txId=${paywaveTransactionId}`);
   
   if (!reference) return { ok: false, message: 'No reference' };
@@ -164,6 +164,18 @@ export async function GET(request) {
     const result = await handlePaywaveConfirmation(reference, verifiedStatus, verifiedTxId);
     projectId = result.projectId || '';
 
+    // Look up the Firestore transactionId so the callback page can save it
+    let firestoreTransactionId = '';
+    if (reference) {
+      try {
+        const q2 = query(collection(db, 'transactions'), where('reference', '==', reference));
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          firestoreTransactionId = snap2.docs[0].id;
+        }
+      } catch (_) {}
+    }
+
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lipapata.co.ke';
     const normalizedStatus = (verifiedStatus || '').toString().toLowerCase();
     const isSuccess = result.ok || 
@@ -174,7 +186,7 @@ export async function GET(request) {
                       normalizedStatus === 'approved';
 
     const redirectUrl = isSuccess
-      ? `${baseUrl}/paywave/callback?ref=${reference}&status=success&projectId=${projectId}`
+      ? `${baseUrl}/paywave/callback?ref=${reference}&status=success&projectId=${projectId}&txId=${firestoreTransactionId}`
       : `${baseUrl}/paywave/callback?ref=${reference}&status=failed&projectId=${projectId}`;
 
     return NextResponse.redirect(redirectUrl);

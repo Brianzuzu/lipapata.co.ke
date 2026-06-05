@@ -44,6 +44,9 @@ export default function ProjectPreview({ params }) {
   const [toast, setToast] = useState(null);
   const [pendingPaymentRef, setPendingPaymentRef] = useState(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [paymentFailed, setPaymentFailed] = useState(false);
+  const [paymentFailedMsg, setPaymentFailedMsg] = useState('');
+  const [stkSecondsLeft, setStkSecondsLeft] = useState(null);
 
 
   useEffect(() => {
@@ -122,7 +125,7 @@ if (typeof window !== 'undefined') {
   // or if they press the back button.
   useEffect(() => {
     let intervalId;
-    
+
     if (project && !isPaid && typeof window !== 'undefined') {
       const txId = localStorage.getItem(`tx_${project.id}`);
       if (txId) {
@@ -136,26 +139,60 @@ if (typeof window !== 'undefined') {
                 localStorage.setItem(`paid_${project.id}`, 'true');
                 setToast({ message: 'Payment confirmed! Unlocking your files...', type: 'success' });
                 setIsPaying(false);
+                setPendingPaymentRef(null);
+                setStkSecondsLeft(null);
                 clearInterval(intervalId);
+              } else if (data.status === 'failed') {
+                // Payment was declined or cancelled — clean up and let user retry
+                clearInterval(intervalId);
+                localStorage.removeItem(`tx_${project.id}`);
+                setIsPaying(false);
+                setPendingPaymentRef(null);
+                setStkSecondsLeft(null);
+                setPaymentFailed(true);
+                setPaymentFailedMsg('Your M-Pesa payment was not completed. You can try again below.');
+                setToast({ message: 'Payment was not completed. Please try again.', type: 'error' });
               }
             }
           } catch (e) {
             console.error('Status check error:', e);
           }
         };
-        
-        // Check immediately
+
         checkStatus();
-        
-        // Then poll every 4 seconds
         intervalId = setInterval(checkStatus, 4000);
       }
     }
-    
+
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
   }, [project, isPaid]);
+
+  // STK countdown timer — auto-expire after 2 minutes if no payment received
+  useEffect(() => {
+    if (!pendingPaymentRef) {
+      setStkSecondsLeft(null);
+      return;
+    }
+    setStkSecondsLeft(120); // 2 minutes
+    const tick = setInterval(() => {
+      setStkSecondsLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(tick);
+          // Only show timeout if still waiting (not yet paid or failed)
+          setIsPaying(false);
+          setPendingPaymentRef(null);
+          setStkSecondsLeft(null);
+          setPaymentFailed(true);
+          setPaymentFailedMsg('The M-Pesa prompt expired — it may not have reached your phone, or you missed it. Please try again.');
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [pendingPaymentRef]);
 
   useEffect(() => {
     if (project?.price !== undefined) {
@@ -181,38 +218,8 @@ if (typeof window !== 'undefined') {
     }
   }, [project, globalSettings, customPrice, appliedDiscount]);
 
-// Auto‑download files once payment is confirmed
-useEffect(() => {
-  if (isPaid && project) {
-    const filesToDownload = project.files && project.files.length > 0
-      ? project.files
-      : [{ fileName: project.fileName, originalUrl: project.originalUrl }];
 
-    filesToDownload.forEach(async (f, idx) => {
-      const safeName = (f.fileName || project.title || `file_${idx}`).replace(/[^a-z0-9.]/gi, '_');
-      try {
-        const txId = (typeof window !== 'undefined' ? localStorage.getItem(`tx_${project.id}`) : null) || project.lastTransactionId;
-        const downloadUrl = `/api/download/${project.id}?t=${txId}${project.files && project.files.length > 0 ? `&index=${idx}` : ''}`;
-        const response = await fetch(downloadUrl);
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || 'Download failed');
-        }
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.setAttribute('download', safeName);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
-      } catch (err) {
-        console.error('Auto‑download error:', err);
-      }
-    });
-  }
-}, [isPaid, project]);
+
 
   useEffect(() => {
     if (project?.uid) {
@@ -275,6 +282,8 @@ useEffect(() => {
   const handlePayment = async () => {
     if (!phoneNumber) return;
     setIsPaying(true);
+    setPaymentFailed(false);
+    setPaymentFailedMsg('');
     setError(null);
 
     try {
@@ -631,6 +640,41 @@ useEffect(() => {
                     {isPaying && !pendingPaymentRef ? <Loader2 className="spin" size={20} /> : `Pay & Unlock (KSh ${paymentBreakdown?.total?.toLocaleString()})`}
                   </button>
 
+                  {/* Payment failed banner */}
+                  {paymentFailed && !isPaying && (
+                    <div style={{
+                      marginTop: '1.5rem',
+                      padding: '1.25rem 1.5rem',
+                      background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)',
+                      borderRadius: '16px',
+                      border: '2px solid #fca5a5',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>❌</div>
+                      <h3 style={{ margin: '0 0 0.4rem', color: '#991b1b', fontSize: '1rem' }}>Payment Not Completed</h3>
+                      <p style={{ margin: '0 0 1rem', color: '#b91c1c', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                        {paymentFailedMsg}
+                      </p>
+                      <button
+                        onClick={() => { setPaymentFailed(false); setPaymentFailedMsg(''); }}
+                        style={{
+                          background: '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          padding: '0.7rem 1.5rem',
+                          borderRadius: '10px',
+                          fontSize: '0.9rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          width: '100%',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        Try Again
+                      </button>
+                    </div>
+                  )}
+
                   {/* STK Push waiting screen — shown after M-Pesa prompt is sent */}
                   {isPaying && pendingPaymentRef && (
                     <div style={{
@@ -645,10 +689,31 @@ useEffect(() => {
                       <h3 style={{ margin: '0 0 0.5rem', color: '#166534', fontSize: '1.1rem' }}>
                         Check Your Phone!
                       </h3>
-                      <p style={{ margin: '0 0 1rem', color: '#15803d', fontSize: '0.9rem' }}>
+                      <p style={{ margin: '0 0 0.75rem', color: '#15803d', fontSize: '0.9rem' }}>
                         An M-Pesa prompt has been sent to <strong>{phoneNumber}</strong>. Enter your PIN to complete payment.
                       </p>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: '#16a34a', fontSize: '0.85rem' }}>
+
+                      {/* Countdown timer */}
+                      {stkSecondsLeft !== null && (
+                        <div style={{ marginBottom: '0.75rem' }}>
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            background: stkSecondsLeft <= 30 ? '#fef2f2' : '#f0fdf4',
+                            color: stkSecondsLeft <= 30 ? '#dc2626' : '#16a34a',
+                            border: `1px solid ${stkSecondsLeft <= 30 ? '#fca5a5' : '#86efac'}`,
+                            padding: '0.3rem 0.8rem',
+                            borderRadius: '100px',
+                            fontSize: '0.8rem',
+                            fontWeight: '700',
+                          }}>
+                            ⏱ Expires in {Math.floor(stkSecondsLeft / 60)}:{String(stkSecondsLeft % 60).padStart(2, '0')}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: '#16a34a', fontSize: '0.85rem', marginBottom: '1rem' }}>
                         <Loader2 className="spin" size={16} />
                         <span>Waiting for payment confirmation...</span>
                       </div>
@@ -656,7 +721,6 @@ useEffect(() => {
                         onClick={handleConfirmPayment}
                         disabled={isConfirming}
                         style={{
-                          marginTop: '1.2rem',
                           background: '#16a34a',
                           color: 'white',
                           border: 'none',
@@ -670,7 +734,8 @@ useEffect(() => {
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: '0.5rem',
-                          boxShadow: '0 4px 10px rgba(22, 163, 74, 0.25)'
+                          boxShadow: '0 4px 10px rgba(22, 163, 74, 0.25)',
+                          fontFamily: 'inherit',
                         }}
                       >
                         {isConfirming ? (
@@ -679,12 +744,17 @@ useEffect(() => {
                             <span>Verifying...</span>
                           </>
                         ) : (
-                          "I've Paid / Verify Payment"
+                          "I've Paid — Verify Payment"
                         )}
                       </button>
                       <button
-                        onClick={() => { setIsPaying(false); setPendingPaymentRef(null); }}
-                        style={{ marginTop: '1rem', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', display: 'block', width: '100%' }}
+                        onClick={() => {
+                          setIsPaying(false);
+                          setPendingPaymentRef(null);
+                          setStkSecondsLeft(null);
+                          if (project) localStorage.removeItem(`tx_${project.id}`);
+                        }}
+                        style={{ marginTop: '0.75rem', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', display: 'block', width: '100%', fontFamily: 'inherit' }}
                       >
                         Cancel and try again
                       </button>
