@@ -49,8 +49,13 @@ export async function GET(request) {
           if (code !== undefined) {
             isApiSuccess = (code === 0 || code === '0' || code === '00' || code === 200 || code === '200');
           } else {
-            const apiStatus = (apiRes.status || '').toString().toLowerCase();
-            isApiSuccess = (apiStatus === 'success' || apiStatus === 'completed' || apiStatus === 'successful');
+            const fullResStr = JSON.stringify(apiRes).toLowerCase();
+            if (fullResStr.includes('cancel') || fullResStr.includes('fail') || fullResStr.includes('insufficient') || fullResStr.includes('timeout')) {
+              isApiSuccess = false;
+            } else {
+              const apiStatus = (apiRes.status || '').toString().toLowerCase();
+              isApiSuccess = (apiStatus === 'success' || apiStatus === 'completed' || apiStatus === 'successful');
+            }
           }
         }
 
