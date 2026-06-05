@@ -123,6 +123,9 @@ if (typeof window !== 'undefined') {
 
   // Poll for payment status in case user completes payment but isn't redirected
   // or if they press the back button.
+  // MOBILE FIX: also listen for visibilitychange — mobile browsers suspend setInterval
+  // when the tab is backgrounded (e.g. the user switches to M-Pesa to enter PIN).
+  // When they come back, we fire a check immediately.
   useEffect(() => {
     let intervalId;
 
@@ -159,8 +162,22 @@ if (typeof window !== 'undefined') {
           }
         };
 
+        // Immediate check + polling interval
         checkStatus();
         intervalId = setInterval(checkStatus, 4000);
+
+        // MOBILE: fire an immediate check the moment the user returns to the tab
+        const onVisibilityChange = () => {
+          if (document.visibilityState === 'visible') {
+            checkStatus();
+          }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+
+        return () => {
+          clearInterval(intervalId);
+          document.removeEventListener('visibilitychange', onVisibilityChange);
+        };
       }
     }
 
@@ -170,30 +187,65 @@ if (typeof window !== 'undefined') {
   // pendingPaymentRef is included so polling starts the moment the STK push response arrives
   }, [project, isPaid, pendingPaymentRef]);
 
-  // STK countdown timer — auto-expire after 2 minutes if no payment received
+  // STK countdown timer — auto-expire after 2 minutes if no payment received.
+  // IMPORTANT: on expiry, do one final status check before declaring it failed
+  // in case the user paid in the last few seconds and the Paywave webhook was slow.
   useEffect(() => {
     if (!pendingPaymentRef) {
       setStkSecondsLeft(null);
       return;
     }
-    setStkSecondsLeft(120); // 2 minutes
+    setStkSecondsLeft(120); // 2 minutes (matches Safaricom STK push window)
     const tick = setInterval(() => {
       setStkSecondsLeft(prev => {
         if (prev <= 1) {
           clearInterval(tick);
-          // Only show timeout if still waiting (not yet paid or failed)
-          setIsPaying(false);
-          setPendingPaymentRef(null);
-          setStkSecondsLeft(null);
-          setPaymentFailed(true);
-          setPaymentFailedMsg('The M-Pesa prompt expired — it may not have reached your phone, or you missed it. Please try again.');
+          // Do one final check before showing timeout — the user may have paid
+          // in the last second while the countdown was frozen (mobile backgrounding)
+          if (project) {
+            const txId = typeof window !== 'undefined' ? localStorage.getItem(`tx_${project.id}`) : null;
+            if (txId) {
+              fetch(`/api/pay/status?transactionId=${txId}`)
+                .then(r => r.json())
+                .then(data => {
+                  if (data.status === 'completed' || data.status === 'success') {
+                    setIsPaid(true);
+                    localStorage.setItem(`paid_${project.id}`, 'true');
+                    setToast({ message: 'Payment confirmed! Unlocking your files...', type: 'success' });
+                    setIsPaying(false);
+                    setPendingPaymentRef(null);
+                    setStkSecondsLeft(null);
+                  } else {
+                    // Genuinely timed out
+                    setIsPaying(false);
+                    setPendingPaymentRef(null);
+                    setStkSecondsLeft(null);
+                    setPaymentFailed(true);
+                    setPaymentFailedMsg('The M-Pesa prompt expired — it may not have reached your phone, or you missed it. Please try again.');
+                  }
+                })
+                .catch(() => {
+                  setIsPaying(false);
+                  setPendingPaymentRef(null);
+                  setStkSecondsLeft(null);
+                  setPaymentFailed(true);
+                  setPaymentFailedMsg('The M-Pesa prompt expired. Please try again.');
+                });
+            } else {
+              setIsPaying(false);
+              setPendingPaymentRef(null);
+              setStkSecondsLeft(null);
+              setPaymentFailed(true);
+              setPaymentFailedMsg('The M-Pesa prompt expired. Please try again.');
+            }
+          }
           return null;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(tick);
-  }, [pendingPaymentRef]);
+  }, [pendingPaymentRef, project]);
 
   useEffect(() => {
     if (project?.price !== undefined) {
