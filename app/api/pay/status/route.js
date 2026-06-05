@@ -42,7 +42,7 @@ export async function GET(request) {
         if (apiRes) {
           const code = apiRes.ResultCode !== undefined ? apiRes.ResultCode : apiRes.resultCode;
           if (code !== undefined) {
-            isApiSuccess = (code === 0 || code === '0' || code === '00');
+            isApiSuccess = (code === 0 || code === '0' || code === '00' || code === 200 || code === '200');
           } else {
             const apiStatus = (apiRes.status || '').toString().toLowerCase();
             isApiSuccess = (apiStatus === 'success' || apiStatus === 'completed' || apiStatus === 'successful');

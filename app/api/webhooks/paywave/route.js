@@ -133,7 +133,7 @@ export async function GET(request) {
             if (apiRes) {
               const code = apiRes.ResultCode !== undefined ? apiRes.ResultCode : apiRes.resultCode;
               if (code !== undefined) {
-                isApiSuccess = (code === 0 || code === '0' || code === '00');
+                isApiSuccess = (code === 0 || code === '0' || code === '00' || code === 200 || code === '200');
               } else {
                 const apiStatus = (apiRes.status || '').toString().toLowerCase();
                 isApiSuccess = (apiStatus === 'success' || apiStatus === 'completed' || apiStatus === 'successful');
@@ -261,12 +261,14 @@ export async function POST(request) {
     
     if (hasResultCode) {
       const code = payload.ResultCode ?? payload.resultCode;
-      isSuccess = (code === 0 || code === '0' || code === '00');
+      isSuccess = (code === 0 || code === '0' || code === '00' || code === 200 || code === '200');
     } else {
       isSuccess = 
         responseCode === 0 || 
         responseCode === '0' ||
         responseCode === '00' ||
+        responseCode === 200 ||
+        responseCode === '200' ||
         responseDesc === 'success' ||
         responseDesc === 'completed' ||
         responseDesc === 'paid' ||
