@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '../../../../lib/firebase';
 import { collection, query, where, getDocs, updateDoc, setDoc, doc, serverTimestamp, increment } from 'firebase/firestore';
-import { checkPaywaveTransactionStatus } from '../../../../lib/paywave';
+import { checkPaywaveTransactionStatus, parsePaywaveResult } from '../../../../lib/paywave';
 
 export const dynamic = 'force-dynamic';
 
@@ -265,36 +265,29 @@ export async function POST(request) {
     
     console.log(`[PAYWAVE POST] reference="${reference}", responseCode="${responseCode}", responseDesc="${responseDesc}"`);
 
-    let isSuccess = false;
-    let code = payload.ResultCode ?? payload.resultCode;
-    if (code === undefined && payload.data) code = payload.data.ResultCode ?? payload.data.resultCode;
-    if (code === undefined && payload.Body?.stkCallback) code = payload.Body.stkCallback.ResultCode ?? payload.Body.stkCallback.resultCode;
-    if (code === undefined && payload.data?.Body?.stkCallback) code = payload.data.Body.stkCallback.ResultCode ?? payload.data.Body.stkCallback.resultCode;
+    const { isSuccess, isFailed } = parsePaywaveResult(payload);
+    const status = isSuccess ? 'success' : (isFailed ? 'failed' : 'pending');
+    console.log(`[PAYWAVE POST] isSuccess=${isSuccess}, isFailed=${isFailed}, treating as status="${status}"`);
 
-    const hasResultCode = code !== undefined;
-    
-    if (hasResultCode) {
-      isSuccess = (code === 0 || code === '0' || code === '00' || code === 200 || code === '200');
-    } else {
-      const fullResStr = JSON.stringify(payload).toLowerCase();
-      if (fullResStr.includes('cancel') || fullResStr.includes('fail') || fullResStr.includes('insufficient') || fullResStr.includes('timeout')) {
-        isSuccess = false;
-      } else {
-        isSuccess = 
-          responseCode === 0 || 
-          responseCode === '0' ||
-          responseCode === '00' ||
-          responseCode === 200 ||
-          responseCode === '200' ||
-          responseDesc === 'success' ||
-          responseDesc === 'completed' ||
-          responseDesc === 'paid' ||
-          responseDesc === 'approved';
+    // If we can't determine outcome from the payload alone, check Paywave tstatus
+    if (!isSuccess && !isFailed && reference) {
+      const q2 = query(collection(db, 'transactions'), where('reference', '==', reference));
+      const snap2 = await getDocs(q2);
+      if (!snap2.empty) {
+        const txReqId = snap2.docs[0].data().transactionRequestId;
+        if (txReqId) {
+          try {
+            const apiRes = await checkPaywaveTransactionStatus(txReqId);
+            const parsed = parsePaywaveResult(apiRes);
+            if (parsed.isSuccess) {
+              const result2 = await handlePaywaveConfirmation(reference, 'success', transaction_id);
+              console.log('[PAYWAVE POST] tstatus fallback result:', result2);
+              return new NextResponse('OK', { status: 200 });
+            }
+          } catch (_) {}
+        }
       }
     }
-
-    const status = isSuccess ? 'success' : 'failed';
-    console.log(`[PAYWAVE POST] isSuccess=${isSuccess}, treating as status="${status}"`);
 
     const result = await handlePaywaveConfirmation(reference, status, transaction_id);
     console.log('[PAYWAVE POST] Result:', JSON.stringify(result));

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp, increment, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
-import { checkPaywaveTransactionStatus } from '../../../../lib/paywave';
+import { checkPaywaveTransactionStatus, parsePaywaveResult } from '../../../../lib/paywave';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,36 +57,7 @@ export async function GET(request) {
         const apiRes = await checkPaywaveTransactionStatus(txReqId);
         console.log(`[STATUS] Paywave API response:`, JSON.stringify(apiRes));
 
-        // --- Determine success from the Paywave response ---
-        let isSuccess = false;
-        let isFailed = false;
-
-        // Paywave wraps the Safaricom STK callback inside the response
-        let code;
-        if (apiRes?.ResultCode !== undefined)                               code = apiRes.ResultCode;
-        else if (apiRes?.resultCode !== undefined)                          code = apiRes.resultCode;
-        else if (apiRes?.data?.ResultCode !== undefined)                    code = apiRes.data.ResultCode;
-        else if (apiRes?.Body?.stkCallback?.ResultCode !== undefined)       code = apiRes.Body.stkCallback.ResultCode;
-        else if (apiRes?.data?.Body?.stkCallback?.ResultCode !== undefined) code = apiRes.data.Body.stkCallback.ResultCode;
-
-        if (code !== undefined) {
-          const codeNum = Number(code);
-          isSuccess = codeNum === 0;
-          // Only mark failed for definitive Safaricom failure codes.
-          // Don't treat "still processing" non-zero codes as failure.
-          const DEFINITIVE_FAILURE_CODES = [1, 2001, 1032, 1037, 1025, 1019];
-          isFailed = DEFINITIVE_FAILURE_CODES.includes(codeNum);
-        } else {
-          // No ResultCode — fall back to string-based heuristics
-          const raw = JSON.stringify(apiRes || '').toLowerCase();
-          if (raw.includes('cancel') || raw.includes('fail') || raw.includes('insufficient') || raw.includes('timeout')) {
-            isFailed = true;
-          } else {
-            const s = (apiRes?.status || apiRes?.Status || '').toString().toLowerCase();
-            isSuccess = (s === 'success' || s === 'completed' || s === 'successful' || s === 'paid');
-          }
-        }
-
+        const { isSuccess, isFailed } = parsePaywaveResult(apiRes);
         console.log(`[STATUS] isSuccess=${isSuccess}, isFailed=${isFailed}`);
 
         if (isSuccess) {
