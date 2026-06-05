@@ -129,15 +129,16 @@ export async function GET(request) {
             const apiRes = await checkPaywaveTransactionStatus(transData.transactionRequestId);
             console.log(`[PAYWAVE GET] PayWave API status check response:`, JSON.stringify(apiRes));
 
-            const isApiSuccess = apiRes && (
-              apiRes.status === 'success' || 
-              apiRes.status === 'completed' || 
-              apiRes.status === 'successful' || 
-              apiRes.resultCode === 0 || 
-              apiRes.resultCode === '0' ||
-              apiRes.ResultCode === '0' ||
-              apiRes.ResultCode === 0
-            );
+            let isApiSuccess = false;
+            if (apiRes) {
+              const code = apiRes.ResultCode !== undefined ? apiRes.ResultCode : apiRes.resultCode;
+              if (code !== undefined) {
+                isApiSuccess = (code === 0 || code === '0' || code === '00');
+              } else {
+                const apiStatus = (apiRes.status || '').toString().toLowerCase();
+                isApiSuccess = (apiStatus === 'success' || apiStatus === 'completed' || apiStatus === 'successful');
+              }
+            }
 
             if (isApiSuccess) {
               verifiedStatus = 'success';
@@ -255,14 +256,22 @@ export async function POST(request) {
     
     console.log(`[PAYWAVE POST] reference="${reference}", responseCode="${responseCode}", responseDesc="${responseDesc}"`);
 
-    const isSuccess = 
-      responseCode === 0 || 
-      responseCode === '0' ||
-      responseCode === '00' ||
-      responseDesc.includes('success') ||
-      responseDesc.includes('completed') ||
-      responseDesc.includes('paid') ||
-      responseDesc.includes('approved');
+    let isSuccess = false;
+    const hasResultCode = payload.ResultCode !== undefined || payload.resultCode !== undefined;
+    
+    if (hasResultCode) {
+      const code = payload.ResultCode ?? payload.resultCode;
+      isSuccess = (code === 0 || code === '0' || code === '00');
+    } else {
+      isSuccess = 
+        responseCode === 0 || 
+        responseCode === '0' ||
+        responseCode === '00' ||
+        responseDesc === 'success' ||
+        responseDesc === 'completed' ||
+        responseDesc === 'paid' ||
+        responseDesc === 'approved';
+    }
 
     const status = isSuccess ? 'success' : 'failed';
     console.log(`[PAYWAVE POST] isSuccess=${isSuccess}, treating as status="${status}"`);

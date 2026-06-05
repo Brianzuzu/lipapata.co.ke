@@ -38,18 +38,16 @@ export async function GET(request) {
         const apiRes = await checkPaywaveTransactionStatus(transaction.transactionRequestId);
         console.log('[STATUS CHECK] PayWave API Response:', JSON.stringify(apiRes));
 
-        const isApiSuccess = apiRes && (
-          apiRes.status === 'success' || 
-          apiRes.status === 'completed' || 
-          apiRes.status === 'successful' || 
-          apiRes.resultCode === 0 || 
-          apiRes.resultCode === '0' ||
-          apiRes.ResultCode === '0' ||
-          apiRes.ResultCode === 0 ||
-          apiRes.ResultCode === '200' ||
-          apiRes.ResultCode === 200 ||
-          (apiRes.ResultDesc && apiRes.ResultDesc.toLowerCase().includes('success'))
-        );
+        let isApiSuccess = false;
+        if (apiRes) {
+          const code = apiRes.ResultCode !== undefined ? apiRes.ResultCode : apiRes.resultCode;
+          if (code !== undefined) {
+            isApiSuccess = (code === 0 || code === '0' || code === '00');
+          } else {
+            const apiStatus = (apiRes.status || '').toString().toLowerCase();
+            isApiSuccess = (apiStatus === 'success' || apiStatus === 'completed' || apiStatus === 'successful');
+          }
+        }
 
         if (isApiSuccess) {
           const verifiedTxId = apiRes.transaction_id || apiRes.transactionId || apiRes.Receipt || 'PWX-VERIFIED';
