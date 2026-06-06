@@ -322,7 +322,7 @@ if (typeof window !== 'undefined') {
           }
           setToast({ message: 'Payment confirmed! Unlocking your files...', type: 'success' });
         } else {
-          setToast({ message: 'Payment is still processing or has not gone through yet. Please enter PIN first.', type: 'warning' });
+          setToast({ message: 'Safaricom is still processing your payment. This can take up to 60 seconds. Please wait a moment and try again.', type: 'warning' });
         }
       } else {
         setToast({ message: 'Could not confirm payment. Please try again.', type: 'error' });
