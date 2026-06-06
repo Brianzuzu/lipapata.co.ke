@@ -9,9 +9,11 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { validateUpload, UPLOAD_LIMITS } from '../../lib/uploadConfig';
 import { calculateCommission } from '../../lib/commission';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 
 export default function Dashboard() {
+  const router = useRouter();
   const [isUploading, setIsUploading] = useState(false);
   const [files, setFiles] = useState([]);
   const [title, setTitle] = useState('');
@@ -68,8 +70,13 @@ export default function Dashboard() {
         // Fetch extra user data
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (userDoc.exists()) {
-          setUserData(userDoc.data());
-          setWithdrawPhone(userDoc.data().phone || '');
+          const data = userDoc.data();
+          if (data.role === 'admin') {
+            router.push('/admin');
+            return;
+          }
+          setUserData(data);
+          setWithdrawPhone(data.phone || '');
         } else {
           // If profile is missing (due to previous permission error), 
           // we set a basic fallback and "heal" the database by creating it now
