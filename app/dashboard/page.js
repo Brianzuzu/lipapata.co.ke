@@ -1577,12 +1577,17 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 1.2rem 2rem;
+          padding: 1rem 1.5rem;
+          min-height: 72px;
+          gap: 1rem;
+          overflow: hidden;
         }
         .row-main {
           display: flex;
           align-items: center;
-          gap: 1rem;
+          gap: 0.9rem;
+          min-width: 0;
+          flex: 1;
         }
         .row-type {
           background: var(--primary-glow);
@@ -1594,114 +1599,116 @@ function ProjectRow({ id, title, price, status, date, resourceType, fileSize, vi
           justify-content: center;
           flex-shrink: 0;
         }
+        .row-title-container {
+          min-width: 0;
+          overflow: hidden;
+        }
         .row-title-container h4 {
-          font-size: 1.1rem;
-          margin-bottom: 0.2rem;
-          word-break: break-word;
+          font-size: 1rem;
+          margin: 0 0 0.15rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 100%;
         }
         .row-title-container span {
-          font-size: 0.85rem;
+          font-size: 0.8rem;
           opacity: 0.5;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: block;
         }
         .row-meta {
           display: flex;
           align-items: center;
-          gap: 2rem;
+          gap: 1.5rem;
+          flex-shrink: 0;
         }
         .project-stats {
           display: flex;
           flex-direction: column;
           align-items: flex-end;
-          font-size: 0.8rem;
-          opacity: 0.7;
-          margin-right: 1rem;
+          font-size: 0.78rem;
+          opacity: 0.6;
           white-space: nowrap;
+          line-height: 1.4;
         }
         .row-price {
           font-weight: 700;
           white-space: nowrap;
+          font-size: 0.95rem;
         }
         .status-badge {
-          padding: 0.4rem 0.8rem;
+          padding: 0.3rem 0.7rem;
           border-radius: 6px;
-          font-size: 0.8rem;
+          font-size: 0.75rem;
           font-weight: 600;
           text-transform: capitalize;
           white-space: nowrap;
         }
         .status-badge.paid {
-          background: rgba(39, 245, 187, 0.2);
+          background: rgba(39, 245, 187, 0.15);
           color: var(--primary);
         }
         .status-badge.pending {
-          background: rgba(255, 193, 7, 0.2);
-          color: #ffc107;
+          background: rgba(255, 193, 7, 0.15);
+          color: #f59e0b;
         }
         .status-badge.completed {
-          background: rgba(39, 245, 187, 0.2);
+          background: rgba(39, 245, 187, 0.15);
           color: var(--primary);
         }
         .row-actions {
           display: flex;
-          gap: 1rem;
+          gap: 0.5rem;
           align-items: center;
+          flex-shrink: 0;
         }
         .btn-icon {
           background: transparent;
           border: none;
           color: var(--foreground);
           cursor: pointer;
-          opacity: 0.5;
-          transition: opacity 0.3s;
+          opacity: 0.45;
+          transition: opacity 0.2s, color 0.2s;
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 0.25rem;
+          padding: 0.3rem;
+          border-radius: 6px;
         }
         .btn-icon:hover {
           opacity: 1;
           color: var(--primary);
+          background: var(--primary-glow);
         }
-        
-        @media (max-width: 1024px) {
-          .row-meta {
-            gap: 1rem;
-          }
-        }
-        
         @media (max-width: 768px) {
           .project-row {
             flex-direction: column;
             align-items: stretch;
-            padding: 1.25rem;
-            gap: 1rem;
+            padding: 1rem;
+            gap: 0.75rem;
+            min-height: unset;
           }
-          .row-main {
-            text-align: left;
-            align-items: flex-start;
+          .row-main { align-items: flex-start; }
+          .row-title-container h4 {
+            white-space: normal;
+            word-break: break-word;
           }
           .row-meta {
-            flex-direction: column;
-            align-items: stretch;
-            border-top: 1px solid rgba(0, 0, 0, 0.05);
-            padding-top: 1rem;
-            gap: 1rem;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            border-top: 1px solid rgba(0,0,0,0.05);
+            padding-top: 0.75rem;
           }
           .project-stats {
             align-items: flex-start;
-            margin-right: 0;
             flex-direction: row;
-            gap: 1rem;
+            gap: 0.75rem;
           }
-          .row-price {
-            font-size: 1.1rem;
-          }
-          .status-badge {
-            align-self: flex-start;
-          }
-          .row-actions {
-            justify-content: flex-start;
-          }
+          .status-badge { align-self: flex-start; }
+          .row-actions { justify-content: flex-start; }
         }
       `}</style>
     </div>
