@@ -16,7 +16,11 @@ const IGIcon = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
     <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+  </svg>
+);
+const WhatsAppIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
   </svg>
 );
 
@@ -32,11 +36,15 @@ const TYPE = {
 const getType = (t) => TYPE[t] || TYPE.file;
 
 /* ─── Product Card ─── */
-function ProductCard({ p, index }) {
+function ProductCard({ p, index, creator }) {
   const t = getType(p.resourceType);
   const Icon = t.icon;
+  const waMsg = `Hi! I'm interested in "${p.title || p.fileName}" on Lipapata.`;
+  const waUrl = creator?.whatsapp ? `https://wa.me/${creator.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(waMsg)}` : null;
+
   return (
-    <Link href={`/p/${p.id}`} className="pcard" style={{ animationDelay: `${index * 55}ms` }}>
+    <div className="pcard-wrap" style={{ animationDelay: `${index * 55}ms` }}>
+      <Link href={`/p/${p.id}`} className="pcard">
       {/* Thumbnail */}
       <div className="pcard-thumb">
         {p.previewUrl ? (
@@ -74,7 +82,13 @@ function ProductCard({ p, index }) {
           <span className="pcard-arrow">→</span>
         </div>
       </div>
-    </Link>
+      </Link>
+      {waUrl && (
+        <a href={waUrl} target="_blank" rel="noreferrer" className="pcard-wa-btn">
+          <WhatsAppIcon size={14} /> Ask about this product
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -167,6 +181,7 @@ export default function CreatorPortfolio({ params }) {
             {creator.website  && <a href={creator.website}  target="_blank" rel="noreferrer" className="pf-pill"><Globe size={14}/> Website</a>}
             {creator.tiktok   && <a href={creator.tiktok}   target="_blank" rel="noreferrer" className="pf-pill pf-tt"><TikTokIcon size={14}/> TikTok</a>}
             {creator.instagram&& <a href={creator.instagram} target="_blank" rel="noreferrer" className="pf-pill pf-ig"><IGIcon size={14}/> Instagram</a>}
+            {creator.whatsapp && <a href={`https://wa.me/${creator.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="pf-pill pf-wa"><WhatsAppIcon size={14}/> WhatsApp</a>}
           </div>
 
           {/* Stats */}
@@ -201,7 +216,7 @@ export default function CreatorPortfolio({ params }) {
         {/* Grid */}
         {visible.length > 0 ? (
           <div className="pf-grid">
-            {visible.map((p, i) => <ProductCard key={p.id} p={p} index={i} />)}
+            {visible.map((p, i) => <ProductCard key={p.id} p={p} index={i} creator={creator} />)}
           </div>
         ) : (
           <div className="pf-empty">
@@ -308,6 +323,7 @@ export default function CreatorPortfolio({ params }) {
         .pf-pill:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
         .pf-tt:hover { background: #000; color: #fff; border-color: #000; }
         .pf-ig:hover { background: linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color: #fff; border-color: transparent; }
+        .pf-wa:hover { background: #25D366; color: #fff; border-color: #25D366; }
 
         /* Stats */
         .pf-stats {
@@ -343,6 +359,10 @@ export default function CreatorPortfolio({ params }) {
         }
 
         /* CARD */
+        .pcard-wrap {
+          display: flex; flex-direction: column; gap: 0.5rem;
+          animation: fadeUp .45s ease both;
+        }
         .pcard {
           display: flex; flex-direction: column;
           text-decoration: none; color: inherit;
@@ -352,12 +372,21 @@ export default function CreatorPortfolio({ params }) {
           border: 1px solid rgba(0,0,0,.07);
           box-shadow: 0 2px 10px rgba(0,0,0,.05);
           transition: transform .28s cubic-bezier(.4,0,.2,1), box-shadow .28s;
-          animation: fadeUp .45s ease both;
+          flex: 1;
         }
         .pcard:hover {
           transform: translateY(-7px);
           box-shadow: 0 22px 50px rgba(0,0,0,.12);
           border-color: rgba(34,197,94,.35);
+        }
+        .pcard-wa-btn {
+          display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+          background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;
+          padding: 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600;
+          text-decoration: none; transition: all 0.2s;
+        }
+        .pcard-wa-btn:hover {
+          background: #25D366; color: white; border-color: #25D366;
         }
 
         /* Thumbnail — tall enough to show content */

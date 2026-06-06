@@ -19,6 +19,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -45,6 +46,7 @@ export default function AuthPage() {
           uid: user.uid,
           name: name,
           phone: phone,
+          whatsapp: whatsapp,
           email: email,
           role: 'creator', // Default role
           createdAt: new Date().toISOString()
@@ -128,6 +130,19 @@ export default function AuthPage() {
                     onChange={(e) => setPhone(e.target.value)}
                     required={!isLogin}
                   />
+                </div>
+
+                <div className="input-group">
+                  <label><Phone size={16} /> WhatsApp Number (Optional)</label>
+                  <input 
+                    type="tel" 
+                    placeholder="254700000000" 
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
+                  />
+                  <small style={{ opacity: 0.6, fontSize: '0.75rem', marginTop: '0.2rem', display: 'block' }}>
+                    Buyers will be able to contact you via this number on your portfolio.
+                  </small>
                 </div>
               </>
             )}
