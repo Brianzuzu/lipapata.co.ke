@@ -35,6 +35,11 @@ export default function Dashboard() {
   const [withdrawals, setWithdrawals] = useState([]);
   const [fetchError, setFetchError] = useState(null);
   const [audience, setAudience] = useState([]);
+  const [globalSettings, setGlobalSettings] = useState({
+    minWithdrawal: 500,
+    maxWithdrawal: 100000,
+    dailyWithdrawalLimit: 1
+  });
   
   // Discount State
   const [isDiscounting, setIsDiscounting] = useState(false);
@@ -87,6 +92,25 @@ export default function Dashboard() {
       setLoadingUser(false);
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const fetchGlobalSettings = async () => {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'global'));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setGlobalSettings({
+            minWithdrawal: data.minWithdrawal || 500,
+            maxWithdrawal: data.maxWithdrawal || 100000,
+            dailyWithdrawalLimit: data.dailyWithdrawalLimit || 1
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching global settings:", err);
+      }
+    };
+    fetchGlobalSettings();
   }, []);
 
   const [totalEarned, setTotalEarned] = useState(0);
@@ -356,26 +380,34 @@ export default function Dashboard() {
   const handleWithdrawalRequest = async (e) => {
     e.preventDefault();
     const availableBalance = totalEarned - totalWithdrawn;
+    const amount = parseFloat(withdrawAmount);
     
-    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return;
-    if (parseFloat(withdrawAmount) < 500) {
-      setWithdrawalMessage({ type: 'error', text: 'Minimum withdrawal amount is KSh 500' });
+    if (!withdrawAmount || amount <= 0) return;
+    if (amount < globalSettings.minWithdrawal) {
+      setWithdrawalMessage({ type: 'error', text: `Minimum withdrawal amount is KSh ${globalSettings.minWithdrawal.toLocaleString()}` });
       return;
     }
-    if (parseFloat(withdrawAmount) > availableBalance) {
+    if (amount > globalSettings.maxWithdrawal) {
+      setWithdrawalMessage({ type: 'error', text: `Maximum withdrawal amount is KSh ${globalSettings.maxWithdrawal.toLocaleString()}` });
+      return;
+    }
+    if (amount > availableBalance) {
       setWithdrawalMessage({ type: 'error', text: 'Insufficient balance' });
       return;
     }
 
-    // Security: Rate Limiting - Max 1 withdrawal per 24 hours
+    // Security: Rate Limiting - Max dailyWithdrawalLimit withdrawals per 24 hours
     const today = new Date().setHours(0, 0, 0, 0);
-    const hasWithdrawnToday = withdrawals.some(w => {
+    const withdrawalsToday = withdrawals.filter(w => {
       const withDate = w.createdAt?.toDate ? w.createdAt.toDate().setHours(0, 0, 0, 0) : 0;
-      return withDate === today;
+      return withDate === today && w.status !== 'failed';
     });
 
-    if (hasWithdrawnToday) {
-      setWithdrawalMessage({ type: 'error', text: 'Security Limit: Only 1 withdrawal allowed per day.' });
+    if (withdrawalsToday.length >= globalSettings.dailyWithdrawalLimit) {
+      setWithdrawalMessage({ 
+        type: 'error', 
+        text: `Security Limit: Only ${globalSettings.dailyWithdrawalLimit} withdrawal request(s) allowed per day.` 
+      });
       return;
     }
 
@@ -835,12 +867,15 @@ export default function Dashboard() {
                 <label>Amount to Withdraw (KSh)</label>
                 <input 
                   type="number" 
-                  placeholder="Min KSh 200" 
+                  placeholder={`Min KSh ${globalSettings.minWithdrawal.toLocaleString()} - Max KSh ${globalSettings.maxWithdrawal.toLocaleString()}`} 
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
                   required
                 />
-                <small style={{ opacity: 0.4 }}>Available for withdrawal: KSh {(totalEarned - totalWithdrawn).toLocaleString()}</small>
+                <small style={{ opacity: 0.4 }}>
+                  Available: KSh {(totalEarned - totalWithdrawn).toLocaleString()} | 
+                  Limit: {globalSettings.dailyWithdrawalLimit} per day
+                </small>
               </div>
 
               <div className="input-group">

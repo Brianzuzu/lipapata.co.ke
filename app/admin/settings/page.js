@@ -11,6 +11,8 @@ export default function AdminSettings() {
   const [settings, setSettings] = useState({
     globalCommission: 3,
     minWithdrawal: 500,
+    maxWithdrawal: 100000,
+    dailyWithdrawalLimit: 1,
     maintenanceMode: false
   });
   const [message, setMessage] = useState(null);
@@ -30,6 +32,9 @@ export default function AdminSettings() {
           globalCommission: data.globalCommission !== undefined
             ? (data.globalCommission < 1 ? data.globalCommission * 100 : data.globalCommission)
             : 3,
+          minWithdrawal: data.minWithdrawal || 500,
+          maxWithdrawal: data.maxWithdrawal || 100000,
+          dailyWithdrawalLimit: data.dailyWithdrawalLimit || 1,
         });
       }
     } catch (err) {
@@ -101,6 +106,34 @@ export default function AdminSettings() {
             </div>
           </div>
 
+          <div className="input-group">
+            <label>Maximum Withdrawal Amount (KSh)</label>
+            <div className="input-with-icon">
+              <input 
+                type="number" 
+                value={settings.maxWithdrawal}
+                onChange={(e) => setSettings({...settings, maxWithdrawal: parseFloat(e.target.value)})}
+              />
+              <span>KSh</span>
+            </div>
+            <small>The maximum amount a creator can withdraw in a single request.</small>
+          </div>
+
+          <div className="input-group">
+            <label>Daily Withdrawal Limit (per creator)</label>
+            <div className="input-with-icon">
+              <input 
+                type="number" 
+                min="1"
+                max="10"
+                value={settings.dailyWithdrawalLimit}
+                onChange={(e) => setSettings({...settings, dailyWithdrawalLimit: parseInt(e.target.value) || 1})}
+              />
+              <span>×/day</span>
+            </div>
+            <small>How many withdrawal requests a single creator can make per 24 hours.</small>
+          </div>
+
           <div className="section-title" style={{ marginTop: '2rem' }}>
             <ShieldCheck size={20} />
             <h3>Platform Security</h3>
@@ -134,6 +167,12 @@ export default function AdminSettings() {
           <div className="help-card glass-card">
             <h3>Commission Impact</h3>
             <p>Changing the global commission will immediately affect the breakdown on all preview pages. Already initiated STK pushes will use the rate at the time of initiation.</p>
+          </div>
+          <div className="help-card glass-card" style={{ marginTop: '1rem' }}>
+            <h3>Withdrawal Rules</h3>
+            <p><strong>Min:</strong> KSh {settings.minWithdrawal.toLocaleString()}<br/>
+            <strong>Max:</strong> KSh {settings.maxWithdrawal.toLocaleString()}<br/>
+            <strong>Daily Limit:</strong> {settings.dailyWithdrawalLimit} request(s) per creator per day</p>
           </div>
         </div>
       </div>

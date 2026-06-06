@@ -4,6 +4,15 @@ import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/fire
 
 export async function POST(request) {
   try {
+    // Verify webhook secret if configured
+    const webhookSecret = process.env.PAYWAVE_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const provided = request.headers.get('x-paywave-secret');
+      if (provided !== webhookSecret) {
+        return new NextResponse('Unauthorized', { status: 401 });
+      }
+    }
+
     const payload = await request.json();
 
     const { paywavePayoutId, status, message } = payload;

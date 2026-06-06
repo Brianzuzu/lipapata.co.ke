@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '../../../../lib/firebase';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { initiatePaywavePayout } from '../../../../lib/paywave';
+import { verifyAdminRequest } from '../../../../lib/adminAuth';
 
 /**
  * Admin Payout Route
@@ -9,6 +10,11 @@ import { initiatePaywavePayout } from '../../../../lib/paywave';
  */
 export async function POST(request) {
   try {
+    const auth = verifyAdminRequest(request);
+    if (!auth.authorized) {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
+
     const { withdrawalId } = await request.json();
 
     if (!withdrawalId) {
