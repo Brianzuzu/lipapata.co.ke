@@ -47,7 +47,9 @@ export default function ProjectPreview({ params }) {
   const [paymentFailed, setPaymentFailed] = useState(false);
   const [paymentFailedMsg, setPaymentFailedMsg] = useState('');
   const [stkSecondsLeft, setStkSecondsLeft] = useState(null);
-
+  const [isManualVerifyOpen, setIsManualVerifyOpen] = useState(false);
+  const [manualMpesaMessage, setManualMpesaMessage] = useState('');
+  const [isManualVerifying, setIsManualVerifying] = useState(false);
 
   useEffect(() => {
     // Auto-fill phone number from localStorage if available
@@ -332,6 +334,45 @@ if (typeof window !== 'undefined') {
       setToast({ message: 'Error confirming payment. Please refresh.', type: 'error' });
     } finally {
       setIsConfirming(false);
+    }
+  };
+
+  const handleManualVerify = async () => {
+    if (!manualMpesaMessage.trim()) {
+      setToast({ message: 'Please paste the M-Pesa message first.', type: 'warning' });
+      return;
+    }
+    const txId = typeof window !== 'undefined' ? localStorage.getItem(`tx_${project.id}`) : null;
+    if (!txId) {
+      setToast({ message: 'No transaction found. Please refresh and try paying again.', type: 'error' });
+      return;
+    }
+
+    setIsManualVerifying(true);
+    try {
+      const res = await fetch('/api/pay/manual-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: txId, mpesaMessage: manualMpesaMessage })
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setIsPaid(true);
+        setIsPaying(false);
+        setPendingPaymentRef(null);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`paid_${project.id}`, 'true');
+        }
+        setToast({ message: 'Receipt verified! Unlocking your files...', type: 'success' });
+      } else {
+        setToast({ message: data.error || 'Could not verify receipt. Make sure you pasted the exact M-Pesa message.', type: 'error' });
+      }
+    } catch (err) {
+      console.error(err);
+      setToast({ message: 'An error occurred. Please try again.', type: 'error' });
+    } finally {
+      setIsManualVerifying(false);
     }
   };
 
@@ -831,14 +872,73 @@ if (typeof window !== 'undefined') {
                           )}
                         </button>
                       )}
+                      {/* Manual Verify Fallback - Shown only if timer expires or is open */}
+                      {(isManualVerifyOpen || (stkSecondsLeft === 0)) && (
+                        <div style={{ marginTop: '1.5rem', background: '#ffffff', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e5e7eb', textAlign: 'left' }}>
+                          <h4 style={{ margin: '0 0 0.5rem', color: '#374151', fontSize: '0.95rem' }}>M-Pesa taking too long?</h4>
+                          <p style={{ margin: '0 0 1rem', color: '#6b7280', fontSize: '0.85rem' }}>
+                            If you already received the M-Pesa confirmation SMS, paste the entire message below to verify your payment instantly.
+                          </p>
+                          <textarea
+                            value={manualMpesaMessage}
+                            onChange={(e) => setManualMpesaMessage(e.target.value)}
+                            placeholder="Paste the full M-Pesa message here (e.g. UF61B6KZGY Confirmed. Ksh2.00 paid to...)"
+                            style={{
+                              width: '100%',
+                              minHeight: '80px',
+                              padding: '0.75rem',
+                              borderRadius: '8px',
+                              border: '1px solid #d1d5db',
+                              fontSize: '0.85rem',
+                              marginBottom: '0.75rem',
+                              fontFamily: 'inherit',
+                              resize: 'vertical'
+                            }}
+                          />
+                          <button
+                            onClick={handleManualVerify}
+                            disabled={isManualVerifying || !manualMpesaMessage.trim()}
+                            style={{
+                              background: '#2563eb',
+                              color: 'white',
+                              border: 'none',
+                              padding: '0.75rem 1.5rem',
+                              borderRadius: '8px',
+                              fontSize: '0.9rem',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.5rem',
+                              fontFamily: 'inherit',
+                              opacity: (!manualMpesaMessage.trim() || isManualVerifying) ? 0.7 : 1
+                            }}
+                          >
+                            {isManualVerifying ? <><Loader2 className="spin" size={16} /> Verifying...</> : 'Verify with Receipt'}
+                          </button>
+                        </div>
+                      )}
+                      
+                      {!isManualVerifyOpen && stkSecondsLeft !== 0 && stkSecondsLeft !== null && stkSecondsLeft <= 90 && (
+                        <button
+                          onClick={() => setIsManualVerifyOpen(true)}
+                          style={{ marginTop: '0.75rem', background: 'none', border: 'none', color: '#2563eb', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', display: 'block', width: '100%', fontFamily: 'inherit' }}
+                        >
+                          Have your M-Pesa code? Verify manually
+                        </button>
+                      )}
+
                       <button
                         onClick={() => {
                           setIsPaying(false);
                           setPendingPaymentRef(null);
                           setStkSecondsLeft(null);
+                          setIsManualVerifyOpen(false);
                           if (project) localStorage.removeItem(`tx_${project.id}`);
                         }}
-                        style={{ marginTop: '0.75rem', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', display: 'block', width: '100%', fontFamily: 'inherit' }}
+                        style={{ marginTop: '1rem', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', display: 'block', width: '100%', fontFamily: 'inherit' }}
                       >
                         Cancel and try again
                       </button>
