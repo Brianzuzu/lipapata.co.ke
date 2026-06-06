@@ -795,38 +795,42 @@ if (typeof window !== 'undefined') {
 
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: '#16a34a', fontSize: '0.85rem', marginBottom: '1rem' }}>
                         <Loader2 className="spin" size={16} />
-                        <span>Waiting for payment confirmation...</span>
+                        <span>Verifying payment automatically...</span>
                       </div>
-                      <button
-                        onClick={handleConfirmPayment}
-                        disabled={isConfirming}
-                        style={{
-                          background: '#16a34a',
-                          color: 'white',
-                          border: 'none',
-                          padding: '0.75rem 1.5rem',
-                          borderRadius: '10px',
-                          fontSize: '0.9rem',
-                          fontWeight: 'bold',
-                          cursor: 'pointer',
-                          width: '100%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.5rem',
-                          boxShadow: '0 4px 10px rgba(22, 163, 74, 0.25)',
-                          fontFamily: 'inherit',
-                        }}
-                      >
-                        {isConfirming ? (
-                          <>
-                            <Loader2 className="spin" size={16} />
-                            <span>Verifying...</span>
-                          </>
-                        ) : (
-                          "I've Paid — Verify Payment"
-                        )}
-                      </button>
+                      
+                      {/* Only show manual button if it's been more than 30 seconds */}
+                      {stkSecondsLeft !== null && stkSecondsLeft <= 90 && (
+                        <button
+                          onClick={handleConfirmPayment}
+                          disabled={isConfirming}
+                          style={{
+                            background: '#16a34a',
+                            color: 'white',
+                            border: 'none',
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: '10px',
+                            fontSize: '0.9rem',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            boxShadow: '0 4px 10px rgba(22, 163, 74, 0.25)',
+                            fontFamily: 'inherit',
+                          }}
+                        >
+                          {isConfirming ? (
+                            <>
+                              <Loader2 className="spin" size={16} />
+                              <span>Checking...</span>
+                            </>
+                          ) : (
+                            "Check Status Manually"
+                          )}
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setIsPaying(false);
