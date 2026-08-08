@@ -10,6 +10,22 @@ import { validateUpload } from '../../../lib/uploadConfig';
 import { calculateCommission } from '../../../lib/commission';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// Level definitions: each level allows up to a budget limit
+const LEVEL_ACCESS = [
+  { level: 1, label: 'New Talent',  maxBudget: 5000,    badge: '🌱', color: '#64748b' },
+  { level: 2, label: 'Rising Star', maxBudget: 20000,   badge: '⭐', color: '#f59e0b' },
+  { level: 3, label: 'Pro',         maxBudget: 100000,  badge: '🚀', color: '#3b82f6' },
+  { level: 4, label: 'Elite',       maxBudget: Infinity, badge: '💎', color: '#10b981' },
+];
+
+function getRequiredLevel(budget) {
+  return LEVEL_ACCESS.find(l => budget <= l.maxBudget) || LEVEL_ACCESS[LEVEL_ACCESS.length - 1];
+}
+
+function getCreatorLevel(userData) {
+  return LEVEL_ACCESS.find(l => l.level === (userData?.creatorLevel || 1)) || LEVEL_ACCESS[0];
+}
+
 const MOCK_TASKS = {
   mock_task_1: {
     id: 'mock_task_1',
@@ -526,6 +542,40 @@ export default function TaskDetailPage({ params }) {
               )}
             </div>
           ) : (
+            // Creator View
+            (() => {
+              const creatorLevelInfo = getCreatorLevel(userData);
+              const requiredLevelInfo = getRequiredLevel(task.budget);
+              const hasAccess = !user || !userData || (userData.creatorLevel || 1) >= requiredLevelInfo.level;
+
+              if (!hasAccess) {
+                return (
+                  <div className="glass-card level-lock-card">
+                    <div className="level-lock-icon">{requiredLevelInfo.badge}</div>
+                    <h2>🔒 Level Restricted Task</h2>
+                    <p style={{ color: '#64748b', margin: '0.75rem 0 1.5rem' }}>
+                      This brief has a budget of <strong>KSh {parseFloat(task.budget).toLocaleString()}</strong>, which requires <strong>{requiredLevelInfo.badge} Level {requiredLevelInfo.level} {requiredLevelInfo.label}</strong> or above to apply.
+                    </p>
+                    <div className="level-compare">
+                      <div className="level-pill" style={{ background: `${creatorLevelInfo.color}22`, color: creatorLevelInfo.color }}>
+                        {creatorLevelInfo.badge} Your Level: {creatorLevelInfo.label}
+                      </div>
+                      <div style={{ fontSize: '1.5rem' }}>→</div>
+                      <div className="level-pill" style={{ background: `${requiredLevelInfo.color}22`, color: requiredLevelInfo.color }}>
+                        {requiredLevelInfo.badge} Required: {requiredLevelInfo.label}
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '1.5rem' }}>
+                      Complete more gigs and earn great ratings to level up and access premium briefs!
+                    </p>
+                    <a href="/tasks" style={{ display: 'inline-block', marginTop: '1rem' }}>
+                      <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center' }}>Browse Other Briefs</button>
+                    </a>
+                  </div>
+                );
+              }
+
+              return (
             <div className="glass-card">
               <h2>Submit Your Deliverable</h2>
               <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '2rem' }}>
@@ -645,6 +695,8 @@ export default function TaskDetailPage({ params }) {
                 </form>
               )}
             </div>
+              );
+            })()
           )}
         </section>
       </div>
@@ -843,6 +895,32 @@ export default function TaskDetailPage({ params }) {
         .status-tag.paid {
           background: #DCFCE7;
           color: #166534;
+        }
+
+        .level-lock-card {
+          text-align: center;
+          padding: 3rem 2rem;
+        }
+
+        .level-lock-icon {
+          font-size: 4rem;
+          margin-bottom: 1rem;
+        }
+
+        .level-compare {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 1rem;
+          margin-top: 1.5rem;
+          flex-wrap: wrap;
+        }
+
+        .level-pill {
+          padding: 0.5rem 1.2rem;
+          border-radius: 100px;
+          font-weight: 700;
+          font-size: 0.9rem;
         }
 
         .submission-proposal {

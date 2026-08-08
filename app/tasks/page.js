@@ -8,14 +8,15 @@ import { Search, Plus, Calendar, DollarSign, User, Briefcase, ChevronRight, Load
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const CATEGORIES = [
-  'All Categories',
-  'Graphic Design',
-  'Web & UI/UX Design',
-  'App & Web Dev',
-  'Architecture & 3D',
-  'Digital Art & Content'
-];
+const CATEGORIES = ["All", "Graphic Design & Branding", "Web & UI/UX Design", "App & Web Dev", "Architecture & 3D", "Digital Art & Content"];
+
+const CATEGORY_BUDGET_LIMITS = {
+  "Graphic Design & Branding": { min: 300, max: 50000 },
+  "Web & UI/UX Design": { min: 2500, max: 150000 },
+  "App & Web Dev": { min: 5000, max: 1000000 },
+  "Architecture & 3D": { min: 3000, max: 1000000 },
+  "Digital Art & Content": { min: 500, max: 1000000 },
+};
 
 const MOCK_TASKS = [
   {
@@ -70,7 +71,7 @@ export default function TasksPage() {
   
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const [newCategory, setNewCategory] = useState('Graphic Design');
+  const [newCategory, setNewCategory] = useState('Graphic Design & Branding');
   const [newBudget, setNewBudget] = useState('');
   const [newDeadline, setNewDeadline] = useState('');
 
@@ -115,7 +116,15 @@ export default function TasksPage() {
     }
     
     if (!newTitle || !newDesc || !newBudget || !newDeadline) {
-      setErrorMsg('Please fill in all required fields.');
+      setErrorMsg('Please fill in all fields.');
+      return;
+    }
+    
+    const budgetValue = parseFloat(newBudget);
+    const limits = CATEGORY_BUDGET_LIMITS[newCategory] || { min: 0, max: Infinity };
+    
+    if (budgetValue < limits.min || budgetValue > limits.max) {
+      setErrorMsg(`Budget for ${newCategory} must be between KSh ${limits.min.toLocaleString()} and KSh ${limits.max.toLocaleString()}.`);
       return;
     }
 
@@ -347,9 +356,11 @@ export default function TasksPage() {
                     <label>Budget (KSh)</label>
                     <input 
                       type="number" 
-                      placeholder="e.g. 5000" 
+                      placeholder={`Min: ${CATEGORY_BUDGET_LIMITS[newCategory]?.min || 0} - Max: ${CATEGORY_BUDGET_LIMITS[newCategory]?.max || ''}`}
                       value={newBudget}
                       onChange={(e) => setNewBudget(e.target.value)}
+                      min={CATEGORY_BUDGET_LIMITS[newCategory]?.min || 0}
+                      max={CATEGORY_BUDGET_LIMITS[newCategory]?.max || 1000000}
                       required
                     />
                   </div>

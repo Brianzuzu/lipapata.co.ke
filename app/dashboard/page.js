@@ -11,6 +11,14 @@ import { calculateCommission } from '../../lib/commission';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+const CATEGORY_BUDGET_LIMITS = {
+  "Graphic Design": { min: 300, max: 50000 },
+  "Graphic Design & Branding": { min: 300, max: 50000 },
+  "Web & UI/UX Design": { min: 2500, max: 150000 },
+  "App & Web Dev": { min: 5000, max: 1000000 },
+  "Architecture & 3D": { min: 3000, max: 1000000 },
+  "Digital Art & Content": { min: 500, max: 1000000 },
+};
 
 export default function Dashboard() {
   const router = useRouter();
@@ -297,6 +305,15 @@ export default function Dashboard() {
   const handlePostBriefFromDashboard = async (e) => {
     e.preventDefault();
     if (!briefTitle || !briefDesc || !briefBudget || !briefDeadline) return;
+    
+    const budgetValue = parseFloat(briefBudget);
+    const limits = CATEGORY_BUDGET_LIMITS[briefCategory] || { min: 0, max: Infinity };
+    
+    if (budgetValue < limits.min || budgetValue > limits.max) {
+      alert(`Budget for ${briefCategory} must be between KSh ${limits.min.toLocaleString()} and KSh ${limits.max.toLocaleString()}.`);
+      return;
+    }
+
     setIsProcessing(true);
     try {
       await addDoc(collection(db, 'tasks'), {
@@ -713,6 +730,60 @@ export default function Dashboard() {
           Audience
         </button>
       </div>
+
+      {/* ─── Creator Level Progress Widget ─────────────────── */}
+      {(() => {
+        const LEVEL_ACCESS = [
+          { level: 1, label: 'New Talent',  badge: '🌱', color: '#64748b', minEarnings: 0,      minTasks: 0,  minRating: 0 },
+          { level: 2, label: 'Rising Star', badge: '⭐', color: '#f59e0b', minEarnings: 5000,   minTasks: 3,  minRating: 4.0 },
+          { level: 3, label: 'Pro',         badge: '🚀', color: '#3b82f6', minEarnings: 50000,  minTasks: 15, minRating: 4.5 },
+          { level: 4, label: 'Elite',       badge: '💎', color: '#10b981', minEarnings: 200000, minTasks: 30, minRating: 4.8 },
+        ];
+        const currentLevel = userData?.creatorLevel || 1;
+        const currentLevelInfo = LEVEL_ACCESS.find(l => l.level === currentLevel) || LEVEL_ACCESS[0];
+        const nextLevelInfo = LEVEL_ACCESS.find(l => l.level === currentLevel + 1);
+        const totalEarnings = userData?.totalEarnings || 0;
+        const totalTasks = userData?.totalTasksUnlocked || 0;
+        const ratingSum = userData?.ratingSum || 0;
+        const ratingCount = userData?.ratingCount || 0;
+        const avgRating = ratingCount > 0 ? (ratingSum / ratingCount).toFixed(1) : '—';
+
+        let earningsProgress = 100, tasksProgress = 100;
+        if (nextLevelInfo) {
+          earningsProgress = Math.min(100, Math.round((totalEarnings / nextLevelInfo.minEarnings) * 100));
+          tasksProgress = Math.min(100, Math.round((totalTasks / nextLevelInfo.minTasks) * 100));
+        }
+
+        return (
+          <div className="level-widget">
+            <div className="level-widget-header">
+              <span className="level-badge" style={{ background: `${currentLevelInfo.color}22`, color: currentLevelInfo.color }}>
+                {currentLevelInfo.badge} Level {currentLevel}: {currentLevelInfo.label}
+              </span>
+              <span className="level-rating">⭐ {avgRating} avg rating</span>
+            </div>
+            <div className="level-stats-row">
+              <div className="level-stat">
+                <span className="level-stat-label">Total Earned</span>
+                <span className="level-stat-val">KSh {totalEarnings.toLocaleString()}</span>
+                {nextLevelInfo && <div className="level-bar"><div className="level-bar-fill" style={{ width: `${earningsProgress}%`, background: currentLevelInfo.color }}></div></div>}
+              </div>
+              <div className="level-stat">
+                <span className="level-stat-label">Tasks Done</span>
+                <span className="level-stat-val">{totalTasks}</span>
+                {nextLevelInfo && <div className="level-bar"><div className="level-bar-fill" style={{ width: `${tasksProgress}%`, background: currentLevelInfo.color }}></div></div>}
+              </div>
+            </div>
+            {nextLevelInfo ? (
+              <p className="level-next-hint">
+                Next: {nextLevelInfo.badge} <strong>{nextLevelInfo.label}</strong> — KSh {nextLevelInfo.minEarnings.toLocaleString()} earned, {nextLevelInfo.minTasks} tasks & ≥ {nextLevelInfo.minRating}★ rating
+              </p>
+            ) : (
+              <p className="level-next-hint" style={{ color: '#10b981', fontWeight: 700 }}>🏆 You have reached the highest level: Elite!</p>
+            )}
+          </div>
+        );
+      })()}
 
       {activeTab === 'projects' && (
         <section className="projects-section animate-fade-in">
@@ -1345,9 +1416,12 @@ export default function Dashboard() {
                 <label>Budget (KSh)</label>
                 <input 
                   type="number" 
-                  placeholder="e.g. 5000" 
+                  placeholder={`Min: ${CATEGORY_BUDGET_LIMITS[briefCategory]?.min || 0} - Max: ${CATEGORY_BUDGET_LIMITS[briefCategory]?.max || ''}`}
                   value={briefBudget}
                   onChange={(e) => setBriefBudget(e.target.value)}
+                  min={CATEGORY_BUDGET_LIMITS[briefCategory]?.min || 0}
+                  max={CATEGORY_BUDGET_LIMITS[briefCategory]?.max || 1000000}
+                  style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)', marginBottom: '1.5rem' }}
                   required
                 />
               </div>
@@ -1381,6 +1455,83 @@ export default function Dashboard() {
           margin-bottom: 2.5rem;
           overflow-x: auto;
           padding-bottom: 0.5rem;
+        }
+
+        .level-widget {
+          background: white;
+          border: 1px solid var(--card-border);
+          border-radius: 16px;
+          padding: 1.25rem 1.5rem;
+          margin-bottom: 1.5rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .level-widget-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+
+        .level-badge {
+          display: inline-block;
+          padding: 0.35rem 1rem;
+          border-radius: 100px;
+          font-weight: 700;
+          font-size: 0.85rem;
+        }
+
+        .level-rating {
+          font-size: 0.9rem;
+          color: #64748b;
+          font-weight: 600;
+        }
+
+        .level-stats-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+        }
+
+        .level-stat {
+          display: flex;
+          flex-direction: column;
+          gap: 0.3rem;
+        }
+
+        .level-stat-label {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          color: #94a3b8;
+          font-weight: 700;
+        }
+
+        .level-stat-val {
+          font-size: 1rem;
+          font-weight: 800;
+          color: #1e293b;
+        }
+
+        .level-bar {
+          height: 6px;
+          background: #f1f5f9;
+          border-radius: 100px;
+          overflow: hidden;
+        }
+
+        .level-bar-fill {
+          height: 100%;
+          border-radius: 100px;
+          transition: width 0.5s ease;
+        }
+
+        .level-next-hint {
+          font-size: 0.8rem;
+          color: #64748b;
+          margin: 0;
         }
 
         .tab-btn {
