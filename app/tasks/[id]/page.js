@@ -1,0 +1,1146 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { db, auth } from '../../../lib/firebase';
+import { doc, getDoc, collection, addDoc, query, where, getDocs, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { ArrowLeft, Loader2, Calendar, User, DollarSign, Upload, AlertCircle, CheckCircle2, ChevronRight, MessageSquare, ExternalLink, Link as LinkIcon, FileText, Image, Film, Music, Archive } from 'lucide-react';
+import Link from 'next/link';
+import { validateUpload } from '../../../lib/uploadConfig';
+import { calculateCommission } from '../../../lib/commission';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const MOCK_TASKS = {
+  mock_task_1: {
+    id: 'mock_task_1',
+    title: 'Minimalist Tech Logo Design',
+    category: 'Graphic Design',
+    description: 'We need a modern, sleek logo for a new fintech startup based in Nairobi. The brand name is "FinFlow". Deliverables should include vector formats (AI, EPS) and high-res PNG/JPG previews.',
+    budget: 3500,
+    clientName: 'Nairobi Fintech Ltd',
+    clientUid: 'mock_client_1',
+    clientEmail: 'info@finflow.co.ke',
+    deadline: '2026-08-25',
+    submissionsCount: 2,
+    createdAt: '2026-08-08T10:00:00Z'
+  },
+  mock_task_2: {
+    id: 'mock_task_2',
+    title: 'Next.js Landing Page Development',
+    category: 'Web & UI/UX Design',
+    description: 'Looking for a developer to convert our Figma design into a responsive Next.js landing page. Clean code, fast performance, and mobile responsive are key. We will host on Vercel.',
+    budget: 15000,
+    clientName: 'Keja Rentals',
+    clientUid: 'mock_client_2',
+    clientEmail: 'tech@kejarentals.co.ke',
+    deadline: '2026-09-02',
+    submissionsCount: 1,
+    createdAt: '2026-08-08T09:00:00Z'
+  },
+  mock_task_3: {
+    id: 'mock_task_3',
+    title: '3D Render of modern 4-Bedroom Villa',
+    category: 'Architecture & 3D',
+    description: 'Need interior and exterior 3D photorealistic renderings for a modern residential villa in Runda. Architectural drawings/floorplans will be provided.',
+    budget: 25000,
+    clientName: 'Alpha Developers',
+    clientUid: 'mock_client_3',
+    clientEmail: 'info@alphadevelopers.co.ke',
+    deadline: '2026-08-30',
+    submissionsCount: 0,
+    createdAt: '2026-08-07T12:00:00Z'
+  }
+};
+
+const MOCK_SUBMISSIONS = [
+  {
+    id: 'sub_1',
+    taskId: 'mock_task_1',
+    creatorName: 'David Mwangi',
+    creatorEmail: 'david@mwangi.com',
+    description: 'Here is my concept. Focused on flow and connectivity for fintech branding. Designed in black, white, and electric blue.',
+    projectId: 'demo',
+    projectTitle: 'FinFlow Logo - david_concept.png',
+    projectPrice: 3500,
+    createdAt: '2026-08-08T12:00:00Z',
+    status: 'pending',
+    previewUrl: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?q=80&w=300&auto=format&fit=crop'
+  },
+  {
+    id: 'sub_2',
+    taskId: 'mock_task_1',
+    creatorName: 'Sarah Wambui',
+    creatorEmail: 'sarah@wambui.com',
+    description: 'Modern minimalist abstract concept featuring dual intersecting arrows to represent seamless cashflow.',
+    projectId: 'demo',
+    projectTitle: 'FinFlow Logo - Sarah_Design.png',
+    projectPrice: 3500,
+    createdAt: '2026-08-08T13:00:00Z',
+    status: 'pending',
+    previewUrl: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=300&auto=format&fit=crop'
+  }
+];
+
+export default function TaskDetailPage({ params }) {
+  const { id } = params;
+  const fileInputRef = useRef(null);
+
+  const [task, setTask] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
+
+  // Submission Form State
+  const [proposalMsg, setProposalMsg] = useState('');
+  const [files, setFiles] = useState([]);
+  const [customPrice, setCustomPrice] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+          setUserData(userDoc.data());
+        }
+      } else {
+        setUserData(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const loadTaskAndSubmissions = async () => {
+    try {
+      setLoading(true);
+      if (id.startsWith('mock_task_')) {
+        const mockTask = MOCK_TASKS[id];
+        setTask(mockTask);
+        if (mockTask) {
+          // Load corresponding mock submissions
+          const subs = MOCK_SUBMISSIONS.filter(s => s.taskId === id);
+          setSubmissions(subs);
+        }
+      } else {
+        // Fetch task from Firestore
+        const docRef = doc(db, 'tasks', id);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const taskData = { id: docSnap.id, ...docSnap.data() };
+          setTask(taskData);
+          setCustomPrice(taskData.budget.toString());
+          
+          // Fetch submissions for this task
+          const qSub = query(collection(db, 'task_submissions'), where('taskId', '==', id));
+          const snapshotSub = await getDocs(qSub);
+          
+          const subsList = await Promise.all(
+            snapshotSub.docs.map(async (docSub) => {
+              const data = docSub.data();
+              let submissionData = { id: docSub.id, ...data };
+              
+              // Load the associated project's details to get watermarked preview / price
+              if (data.projectId) {
+                try {
+                  const projDoc = await getDoc(doc(db, 'projects', data.projectId));
+                  if (projDoc.exists()) {
+                    const proj = projDoc.data();
+                    submissionData.previewUrl = proj.previewUrl || '';
+                    submissionData.projectTitle = proj.title || proj.fileName;
+                    submissionData.projectPrice = proj.price;
+                    
+                    // Check if this project has a completed payment transaction
+                    const qTrans = query(
+                      collection(db, 'transactions'),
+                      where('projectId', '==', data.projectId),
+                      where('status', '==', 'completed')
+                    );
+                    const snapTrans = await getDocs(qTrans);
+                    if (!snapTrans.empty) {
+                      submissionData.status = 'paid';
+                      submissionData.transactionId = snapTrans.docs[0].id;
+                    }
+                  }
+                } catch (e) {
+                  console.error("Error loading sub project:", e);
+                }
+              }
+              return submissionData;
+            })
+          );
+          
+          // Sort submissions by date
+          subsList.sort((a, b) => {
+            const da = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+            const db = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+            return db - da;
+          });
+          setSubmissions(subsList);
+        } else {
+          setTask(null);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading task:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTaskAndSubmissions();
+  }, [id]);
+
+  const handleFileChange = (e) => {
+    setUploadError('');
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files);
+      for (const f of selectedFiles) {
+        const validation = validateUpload(f, 'FREE');
+        if (!validation.valid) {
+          setUploadError(`Error with ${f.name}: ${validation.error}`);
+          return;
+        }
+      }
+      setFiles(prev => [...prev, ...selectedFiles]);
+    }
+  };
+
+  const handleSubmission = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      window.location.href = '/login';
+      return;
+    }
+
+    if (id.startsWith('mock_task_')) {
+      // Demo logic
+      setIsUploading(true);
+      setUploadProgress(20);
+      setTimeout(() => setUploadProgress(60), 500);
+      setTimeout(() => {
+        setUploadProgress(100);
+        setIsUploading(false);
+        setSuccessMsg('Demo Proposal submitted successfully!');
+        setProposalMsg('');
+        setFiles([]);
+      }, 1000);
+      return;
+    }
+
+    if (files.length === 0) {
+      alert("Please upload at least one final deliverable file.");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(10);
+    setUploadError('');
+
+    try {
+      // 1. Sign Cloudinary upload
+      const signRes = await fetch('/api/upload/sign', { method: 'POST' });
+      if (!signRes.ok) throw new Error("Failed to sign uploads.");
+      const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
+
+      let uploadedFilesData = [];
+
+      // 2. Upload to Cloudinary
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const mimeType = file.type || '';
+        const isVideo = mimeType.startsWith('video/');
+        const isAudio = mimeType.startsWith('audio/');
+        const isImage = mimeType.startsWith('image/');
+        const resourceType = (isVideo || isAudio) ? 'video' : isImage ? 'image' : 'raw';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('api_key', apiKey);
+        formData.append('timestamp', timestamp);
+        formData.append('signature', signature);
+        formData.append('folder', folder);
+
+        setUploadProgress(10 + Math.floor((i / files.length) * 60));
+
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const errData = await uploadRes.json();
+          throw new Error(errData.error?.message || `Direct upload failed for ${file.name}`);
+        }
+
+        const cloudData = await uploadRes.json();
+
+        // 3. Generate preview watermark for images/videos/audio
+        let previewUrl = '';
+        if (isImage || isVideo || isAudio) {
+          const previewRes = await fetch('/api/upload/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              publicId: cloudData.public_id,
+              resourceType: isAudio ? 'audio' : cloudData.resource_type,
+              creatorName: userData?.name || 'Creator',
+            }),
+          });
+          if (previewRes.ok) {
+            const previewData = await previewRes.json();
+            previewUrl = previewData.previewUrl;
+          }
+        }
+
+        uploadedFilesData.push({
+          originalUrl: cloudData.secure_url || '',
+          originalPublicId: cloudData.public_id || '',
+          previewUrl: previewUrl || '',
+          resourceType: isAudio ? 'audio' : cloudData.resource_type || 'raw',
+          format: cloudData.format || 'unknown',
+          fileSize: cloudData.bytes || 0,
+          fileName: file.name || 'file'
+        });
+      }
+
+      setUploadProgress(80);
+
+      // 4. Create standard Lipapata project for this submission
+      const mainFile = uploadedFilesData[0] || {};
+      const projRef = await addDoc(collection(db, 'projects'), {
+        uid: user.uid,
+        title: `Deliverable for: ${task.title}`,
+        price: parseFloat(customPrice) || task.budget,
+        files: uploadedFilesData,
+        originalUrl: mainFile.originalUrl || '',
+        originalPublicId: mainFile.originalPublicId || '',
+        previewUrl: mainFile.previewUrl || '',
+        resourceType: mainFile.resourceType || 'raw',
+        format: mainFile.format || 'unknown',
+        fileSize: mainFile.fileSize || 0,
+        fileName: mainFile.fileName || 'file',
+        createdAt: serverTimestamp(),
+        status: 'Pending',
+        isPWYW: false,
+        expiresAfterDelivery: false,
+      });
+
+      setUploadProgress(90);
+
+      // 5. Create task submission
+      await addDoc(collection(db, 'task_submissions'), {
+        taskId: task.id,
+        creatorUid: user.uid,
+        creatorName: userData?.name || user.displayName || user.email.split('@')[0],
+        creatorEmail: user.email,
+        description: proposalMsg,
+        projectId: projRef.id,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+
+      // 6. Increment submissions count on task brief
+      await updateDoc(doc(db, 'tasks', task.id), {
+        submissionsCount: increment(1)
+      });
+
+      setUploadProgress(100);
+      setSuccessMsg('Your proposal and deliverable were submitted successfully!');
+      setProposalMsg('');
+      setFiles([]);
+      loadTaskAndSubmissions();
+    } catch (err) {
+      console.error(err);
+      setUploadError(err.message || 'Submission failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const getFileIcon = (f) => {
+    if (!f) return <Upload size={32} className="icon-primary" />;
+    const mime = f.type || '';
+    const name = f.name || '';
+    if (mime.startsWith('image/')) return <Image size={32} className="icon-primary" />;
+    if (mime.startsWith('video/')) return <Film size={32} className="icon-primary" />;
+    if (mime.startsWith('audio/')) return <Music size={32} className="icon-primary" />;
+    if (name.endsWith('.zip') || mime.includes('zip') || mime.includes('archive')) return <Archive size={32} className="icon-primary" />;
+    return <FileText size={32} className="icon-primary" />;
+  };
+
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <Loader2 className="spin" size={40} />
+        <p>Loading brief details...</p>
+      </div>
+    );
+  }
+
+  if (!task) {
+    return (
+      <div className="not-found-screen">
+        <AlertCircle size={48} color="#EF4444" />
+        <h2>Brief Not Found</h2>
+        <p>This task brief may have been deleted, closed, or does not exist.</p>
+        <Link href="/tasks">
+          <button className="btn-primary" style={{ marginTop: '1.5rem' }}>
+            <ArrowLeft size={16} /> Back to Marketplace
+          </button>
+        </Link>
+      </div>
+    );
+  }
+
+  const isClient = task.clientUid === user?.uid;
+  const displaySubmissions = submissions;
+
+  return (
+    <div className="task-detail-container">
+      {/* Navigation */}
+      <nav className="nav">
+        <Link href="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <div className="logo-container" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <img src="/logo-v2.png" alt="Lipapata Logo" style={{ width: '80px', height: '80px', objectFit: 'contain', mixBlendMode: 'darken' }} />
+            <div className="logo">Lipapata<span>.</span></div>
+          </div>
+        </Link>
+        <div className="nav-links">
+          <Link href="/">Home</Link>
+          <Link href="/tasks" style={{ color: 'var(--primary)', fontWeight: 800 }}>Browse Tasks</Link>
+          {user ? (
+            <Link href="/dashboard" className="login-link">Dashboard</Link>
+          ) : (
+            <Link href="/login" className="login-link">Login</Link>
+          )}
+        </div>
+      </nav>
+
+      {/* Back button */}
+      <Link href="/tasks" className="back-link">
+        <ArrowLeft size={16} /> Back to marketplace
+      </Link>
+
+      <div className="task-layout">
+        {/* Left Side: Task Brief Details */}
+        <section className="task-brief-col glass-card">
+          <span className="task-category-badge">{task.category}</span>
+          <h1>{task.title}</h1>
+          
+          <div className="task-metadata-grid">
+            <div className="meta-card">
+              <span className="meta-label">Client</span>
+              <div className="meta-value-row">
+                <User size={16} />
+                <span>{task.clientName}</span>
+              </div>
+            </div>
+            <div className="meta-card">
+              <span className="meta-label">Escrow Budget</span>
+              <div className="meta-value-row budget">
+                <DollarSign size={16} />
+                <span>KSh {parseFloat(task.budget).toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="meta-card">
+              <span className="meta-label">Deadline</span>
+              <div className="meta-value-row">
+                <Calendar size={16} />
+                <span>{task.deadline}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="description-content">
+            <h3>Brief Description &amp; Specifications</h3>
+            <p>{task.description}</p>
+          </div>
+        </section>
+
+        {/* Right Side: Client View (submissions list) OR Creator View (apply form) */}
+        <section className="task-action-col">
+          {isClient ? (
+            <div className="glass-card full-height">
+              <h2>Creator Deliverables ({displaySubmissions.length})</h2>
+              <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '2rem' }}>
+                Review proposals and preview watermarked files. Click "Unlock Deliverable" to release the budget.
+              </p>
+
+              {displaySubmissions.length > 0 ? (
+                <div className="submissions-list">
+                  {displaySubmissions.map((sub) => (
+                    <div key={sub.id} className="submission-card">
+                      <div className="submission-header">
+                        <h4>{sub.creatorName}</h4>
+                        <span className={`status-tag ${sub.status}`}>
+                          {sub.status === 'paid' ? 'Paid & Unlocked' : 'Pending Review'}
+                        </span>
+                      </div>
+                      
+                      <p className="submission-proposal">{sub.description}</p>
+                      
+                      {sub.previewUrl && (
+                        <div className="submission-preview-box">
+                          <img src={sub.previewUrl} alt="Deliverable Preview" />
+                          <div className="preview-watermark">PREVIEW ONLY</div>
+                        </div>
+                      )}
+                      
+                      <div className="submission-project-info">
+                        <FileText size={16} />
+                        <span>{sub.projectTitle || 'Deliverable Bundle'}</span>
+                        <span className="price-tag">KSh {parseFloat(sub.projectPrice || task.budget).toLocaleString()}</span>
+                      </div>
+
+                      <div className="submission-footer">
+                        {sub.status === 'paid' ? (
+                          <Link href={`/api/download/${sub.projectId}?t=${sub.transactionId}`} target="_blank">
+                            <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+                              Download Final Deliverables
+                            </button>
+                          </Link>
+                        ) : (
+                          <Link href={`/p/${sub.projectId}`} target="_blank" style={{ width: '100%' }}>
+                            <button className="btn-pay-action">
+                              Preview &amp; Unlock Deliverable <ChevronRight size={16} />
+                            </button>
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-submissions">
+                  <MessageSquare size={40} />
+                  <h4>No submissions yet</h4>
+                  <p>Creators will upload files here when they finish working on your brief.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="glass-card">
+              <h2>Submit Your Deliverable</h2>
+              <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '2rem' }}>
+                Pitch your solution and upload files. We will auto-compress and watermark them for safe preview before payment.
+              </p>
+
+              {successMsg && (
+                <div className="success-banner">
+                  <CheckCircle2 size={20} />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="error-banner">
+                  <AlertCircle size={20} />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+
+              {!successMsg && (
+                <form onSubmit={handleSubmission}>
+                  <div className="input-group">
+                    <label>Proposal Message / Remarks</label>
+                    <textarea 
+                      rows={3}
+                      placeholder="Hi, I completed the brand styling following your specs..." 
+                      value={proposalMsg}
+                      onChange={(e) => setProposalMsg(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div 
+                    className="upload-dropzone"
+                    onClick={() => fileInputRef.current.click()}
+                  >
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      onChange={handleFileChange}
+                      accept="image/*,video/*,audio/*,.pdf,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.psd,.ai,.fig,.ttf,.otf"
+                      multiple
+                      style={{ display: 'none' }}
+                    />
+                    
+                    {files.length > 0 ? (
+                      <div className="selected-files">
+                        {files.map((file, idx) => (
+                          <div key={idx} className="file-item">
+                            {getFileIcon(file)}
+                            <div className="file-details">
+                              <p>{file.name}</p>
+                              <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFiles(files.filter((_, i) => i !== idx));
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="dropzone-inner">
+                        <Upload size={32} className="icon-primary" />
+                        <p>Click to browse final deliverable files</p>
+                        <span>ZIPs, PDFs, Designs, Images, Video, Audio &amp; Fonts</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="input-group">
+                    <label>Deliverable Price (KSh)</label>
+                    <input 
+                      type="number" 
+                      value={customPrice}
+                      onChange={(e) => setCustomPrice(e.target.value)}
+                      placeholder={task.budget.toString()}
+                      required
+                    />
+                    <small style={{ opacity: 0.5 }}>Defaults to task brief budget.</small>
+                  </div>
+
+                  {customPrice && parseFloat(customPrice) > 0 && (
+                    <div className="net-earnings-card">
+                      <div className="net-row">
+                        <span>Platform Commission (3%)</span>
+                        <span>- KSh {calculateCommission(parseFloat(customPrice), 'FREE').platformFee}</span>
+                      </div>
+                      <div className="net-row earnings">
+                        <span>Your Net Pay</span>
+                        <span>KSh {calculateCommission(parseFloat(customPrice), 'FREE').creatorEarnings}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {isUploading && (
+                    <div className="progress-bar-container">
+                      <div className="progress-fill" style={{ width: `${uploadProgress}%` }}></div>
+                      <span className="progress-text">Uploading deliverable... {uploadProgress}%</span>
+                    </div>
+                  )}
+
+                  <button 
+                    type="submit" 
+                    className="btn-primary" 
+                    style={{ width: '100%', justifyContent: 'center', marginTop: '1.5rem' }}
+                    disabled={isUploading || files.length === 0}
+                  >
+                    {isUploading ? 'Submitting Work...' : 'Submit Deliverable & Pitch'}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <style jsx>{`
+        .task-detail-container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 0 1.5rem 4rem;
+        }
+
+        .nav {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.6rem 1.5rem;
+          margin: 1rem auto;
+          background: rgba(255, 255, 255, 0.7);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border-radius: 20px;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          position: sticky;
+          top: 1rem;
+          z-index: 100;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+
+        .nav-links {
+          display: flex;
+          gap: 2rem;
+          align-items: center;
+        }
+
+        .nav-links a {
+          color: #1e293b;
+          text-decoration: none;
+          font-weight: 600;
+          transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+          color: var(--primary);
+        }
+
+        .login-link {
+          color: var(--primary) !important;
+          font-weight: 800 !important;
+        }
+
+        .logo {
+          font-size: 1.8rem;
+          font-weight: 800;
+          color: #000;
+        }
+
+        .logo span {
+          color: var(--primary);
+        }
+
+        .back-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          color: #64748b;
+          text-decoration: none;
+          font-weight: 600;
+          margin-bottom: 2rem;
+          transition: color 0.2s;
+        }
+
+        .back-link:hover {
+          color: var(--primary);
+        }
+
+        .task-layout {
+          display: grid;
+          grid-template-columns: 1.4fr 1.1fr;
+          gap: 2rem;
+          align-items: start;
+        }
+
+        .task-brief-col {
+          padding: 2.5rem;
+        }
+
+        .task-category-badge {
+          background: var(--primary-glow);
+          color: var(--primary);
+          padding: 0.3rem 0.8rem;
+          border-radius: 100px;
+          font-size: 0.8rem;
+          font-weight: 700;
+          display: inline-block;
+          margin-bottom: 1rem;
+        }
+
+        .task-brief-col h1 {
+          font-size: 2.5rem;
+          font-weight: 900;
+          margin-bottom: 1.5rem;
+        }
+
+        .task-metadata-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 1rem;
+          margin-bottom: 2.5rem;
+        }
+
+        .meta-card {
+          background: #F8FAFC;
+          border: 1px solid var(--card-border);
+          border-radius: 12px;
+          padding: 1rem;
+        }
+
+        .meta-label {
+          display: block;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          color: #94a3b8;
+          font-weight: 700;
+          margin-bottom: 0.3rem;
+        }
+
+        .meta-value-row {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          font-weight: 700;
+          color: #334155;
+          font-size: 0.95rem;
+        }
+
+        .meta-value-row.budget {
+          color: var(--primary);
+        }
+
+        .description-content h3 {
+          font-size: 1.25rem;
+          font-weight: 800;
+          margin-bottom: 1rem;
+        }
+
+        .description-content p {
+          color: #475569;
+          line-height: 1.7;
+          font-size: 1rem;
+          white-space: pre-line;
+        }
+
+        .task-action-col h2 {
+          font-size: 1.5rem;
+          font-weight: 800;
+          margin-bottom: 0.5rem;
+        }
+
+        .submissions-list {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+
+        .submission-card {
+          background: #F8FAFC;
+          border: 1px solid var(--card-border);
+          border-radius: 14px;
+          padding: 1.5rem;
+        }
+
+        .submission-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.8rem;
+        }
+
+        .submission-header h4 {
+          font-size: 1.05rem;
+          font-weight: 800;
+        }
+
+        .status-tag {
+          font-size: 0.75rem;
+          font-weight: 700;
+          padding: 0.2rem 0.6rem;
+          border-radius: 6px;
+        }
+
+        .status-tag.pending {
+          background: #FEF3C7;
+          color: #92400E;
+        }
+
+        .status-tag.paid {
+          background: #DCFCE7;
+          color: #166534;
+        }
+
+        .submission-proposal {
+          font-size: 0.9rem;
+          color: #475569;
+          line-height: 1.5;
+          margin-bottom: 1.2rem;
+        }
+
+        .submission-preview-box {
+          position: relative;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #111;
+          aspect-ratio: 16/10;
+          margin-bottom: 1.2rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .submission-preview-box img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          opacity: 0.85;
+        }
+
+        .preview-watermark {
+          position: absolute;
+          font-weight: 900;
+          font-size: 1.8rem;
+          opacity: 0.15;
+          transform: rotate(-30deg);
+          color: white;
+          pointer-events: none;
+        }
+
+        .submission-project-info {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.85rem;
+          color: #64748b;
+          background: white;
+          padding: 0.6rem 0.8rem;
+          border-radius: 8px;
+          border: 1px solid var(--card-border);
+          margin-bottom: 1.2rem;
+        }
+
+        .submission-project-info .price-tag {
+          margin-left: auto;
+          font-weight: 800;
+          color: var(--primary);
+        }
+
+        .btn-pay-action {
+          background: var(--primary);
+          color: white;
+          border: none;
+          padding: 0.75rem 1rem;
+          border-radius: 10px;
+          font-weight: 700;
+          width: 100%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.4rem;
+          box-shadow: 0 4px 12px var(--primary-glow);
+          transition: all 0.2s;
+        }
+
+        .btn-pay-action:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(34, 197, 94, 0.25);
+        }
+
+        .empty-submissions {
+          text-align: center;
+          padding: 4rem 1rem;
+          color: #94a3b8;
+        }
+
+        .empty-submissions h4 {
+          margin-top: 1rem;
+          color: #475569;
+        }
+
+        /* Application Form styling */
+        .success-banner {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: #DCFCE7;
+          border: 1px solid rgba(22, 101, 52, 0.2);
+          color: #166534;
+          padding: 1rem;
+          border-radius: 12px;
+          margin-bottom: 2rem;
+          font-weight: 600;
+        }
+
+        .error-banner {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: #FEE2E2;
+          border: 1px solid rgba(153, 27, 27, 0.2);
+          color: #991B1B;
+          padding: 1rem;
+          border-radius: 12px;
+          margin-bottom: 2rem;
+          font-weight: 600;
+        }
+
+        .input-group {
+          margin-bottom: 1.5rem;
+        }
+
+        .input-group label {
+          display: block;
+          font-weight: 600;
+          color: #475569;
+          font-size: 0.88rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .input-group textarea, .input-group input {
+          width: 100%;
+          background: #F8FAFC;
+          border: 1px solid var(--card-border);
+          padding: 0.85rem;
+          border-radius: 8px;
+          font-family: inherit;
+          outline: none;
+          color: var(--foreground);
+        }
+
+        .input-group textarea:focus, .input-group input:focus {
+          border-color: var(--primary);
+        }
+
+        .upload-dropzone {
+          border: 2px dashed var(--glass-border);
+          border-radius: 14px;
+          padding: 2rem 1rem;
+          text-align: center;
+          margin-bottom: 1.5rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .upload-dropzone:hover {
+          border-color: var(--primary);
+          background: var(--primary-glow);
+        }
+
+        .dropzone-inner p {
+          font-weight: 700;
+          margin-top: 0.5rem;
+          font-size: 0.9rem;
+        }
+
+        .dropzone-inner span {
+          font-size: 0.75rem;
+          opacity: 0.5;
+          display: block;
+          margin-top: 0.2rem;
+        }
+
+        .selected-files {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .file-item {
+          display: flex;
+          align-items: center;
+          gap: 0.8rem;
+          background: white;
+          padding: 0.6rem;
+          border-radius: 8px;
+          border: 1px solid var(--card-border);
+          text-align: left;
+        }
+
+        .file-details {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .file-details p {
+          font-size: 0.85rem;
+          font-weight: 700;
+          margin: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .file-details span {
+          font-size: 0.75rem;
+          opacity: 0.5;
+        }
+
+        .file-item button {
+          background: transparent;
+          border: none;
+          color: #EF4444;
+          cursor: pointer;
+          font-weight: 700;
+          padding: 0.3rem;
+        }
+
+        .net-earnings-card {
+          background: #F8FAFC;
+          border: 1px solid var(--card-border);
+          padding: 0.8rem 1rem;
+          border-radius: 8px;
+          font-size: 0.85rem;
+          margin-top: 0.5rem;
+        }
+
+        .net-row {
+          display: flex;
+          justify-content: space-between;
+          color: #64748b;
+          margin-bottom: 0.3rem;
+        }
+
+        .net-row.earnings {
+          border-top: 1px solid rgba(0,0,0,0.05);
+          padding-top: 0.5rem;
+          margin-top: 0.5rem;
+          color: var(--primary);
+          font-weight: 700;
+          font-size: 0.95rem;
+        }
+
+        .progress-bar-container {
+          background: rgba(0,0,0,0.05);
+          border-radius: 100px;
+          height: 6px;
+          width: 100%;
+          overflow: hidden;
+          position: relative;
+          margin-top: 1.5rem;
+        }
+
+        .progress-fill {
+          background: var(--primary);
+          height: 100%;
+          transition: width 0.3s;
+        }
+
+        .progress-text {
+          font-size: 0.75rem;
+          color: #64748b;
+          display: block;
+          text-align: right;
+          margin-top: 0.3rem;
+        }
+
+        .not-found-screen {
+          text-align: center;
+          padding: 6rem 2rem;
+          font-family: inherit;
+        }
+
+        .not-found-screen h2 {
+          font-size: 1.8rem;
+          font-weight: 800;
+          margin: 1.5rem 0 0.5rem;
+        }
+
+        .not-found-screen p {
+          color: #64748b;
+        }
+
+        @media (max-width: 900px) {
+          .task-layout {
+            grid-template-columns: 1fr;
+          }
+          .task-brief-col {
+            padding: 1.5rem;
+          }
+          .task-brief-col h1 {
+            font-size: 2rem;
+          }
+          .task-metadata-grid {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}

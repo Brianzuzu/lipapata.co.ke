@@ -59,6 +59,20 @@ export default function Dashboard() {
     instagram: ''
   });
 
+  // Marketplace & Tasks State
+  const [activeTab, setActiveTab] = useState('projects');
+  const [myPostedTasks, setMyPostedTasks] = useState([]);
+  const [myApplications, setMyApplications] = useState([]);
+  const [allMarketplaceTasks, setAllMarketplaceTasks] = useState([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [isPostingBriefModalOpen, setIsPostingBriefModalOpen] = useState(false);
+  
+  const [briefTitle, setBriefTitle] = useState('');
+  const [briefDesc, setBriefDesc] = useState('');
+  const [briefCategory, setBriefCategory] = useState('Graphic Design');
+  const [briefBudget, setBriefBudget] = useState('');
+  const [briefDeadline, setBriefDeadline] = useState('');
+
   const userPlan = 'FREE'; // Will be dynamic later
   
   const fileInputRef = useRef(null);
@@ -91,6 +105,7 @@ export default function Dashboard() {
           setDoc(doc(db, 'users', currentUser.uid), fallbackData).catch(err => console.error("Database healing failed:", err));
         }
         fetchProjects(currentUser.uid);
+        fetchTasksData(currentUser.uid);
       } else {
         setProjects([]);
         setUploadCount(0);
@@ -223,6 +238,92 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
       setFetchError("Could not load dashboard data. Please check your connection.");
+    }
+  };
+
+  const fetchTasksData = async (uid) => {
+    try {
+      setLoadingTasks(true);
+      
+      // Fetch tasks posted by this user (Client Board)
+      const qPosted = query(collection(db, 'tasks'), where('clientUid', '==', uid));
+      const snapPosted = await getDocs(qPosted);
+      const postedList = snapPosted.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0));
+      setMyPostedTasks(postedList);
+
+      // Fetch applications submitted by this user (My Applications)
+      const qApps = query(collection(db, 'task_submissions'), where('creatorUid', '==', uid));
+      const snapApps = await getDocs(qApps);
+      const appsList = await Promise.all(snapApps.docs.map(async (docSub) => {
+        const data = docSub.data();
+        let appData = { id: docSub.id, ...data };
+        
+        if (data.taskId) {
+          const taskDoc = await getDoc(doc(db, 'tasks', data.taskId));
+          if (taskDoc.exists()) {
+            appData.taskTitle = taskDoc.data().title;
+            appData.taskCategory = taskDoc.data().category;
+            appData.taskBudget = taskDoc.data().budget;
+          }
+        }
+        
+        if (data.projectId) {
+          const transQuery = query(collection(db, 'transactions'), where('projectId', '==', data.projectId), where('status', '==', 'completed'));
+          const snapTrans = await getDocs(transQuery);
+          if (!snapTrans.empty) {
+            appData.status = 'paid';
+          }
+        }
+        return appData;
+      }));
+      setMyApplications(appsList.sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0)));
+
+      // Fetch all open briefs from other clients (Find Gigs)
+      const qMarket = query(collection(db, 'tasks'), where('status', '==', 'open'));
+      const snapMarket = await getDocs(qMarket);
+      const marketList = snapMarket.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(t => t.clientUid !== uid)
+        .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0));
+      setAllMarketplaceTasks(marketList);
+
+    } catch (err) {
+      console.error("Error fetching tasks data in dashboard:", err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const handlePostBriefFromDashboard = async (e) => {
+    e.preventDefault();
+    if (!briefTitle || !briefDesc || !briefBudget || !briefDeadline) return;
+    setIsProcessing(true);
+    try {
+      await addDoc(collection(db, 'tasks'), {
+        title: briefTitle,
+        description: briefDesc,
+        category: briefCategory,
+        budget: parseFloat(briefBudget),
+        deadline: briefDeadline,
+        clientUid: user.uid,
+        clientName: userData?.name || user.displayName || user.email.split('@')[0],
+        clientEmail: user.email,
+        status: 'open',
+        submissionsCount: 0,
+        createdAt: serverTimestamp()
+      });
+      setIsPostingBriefModalOpen(false);
+      setBriefTitle('');
+      setBriefDesc('');
+      setBriefBudget('');
+      setBriefDeadline('');
+      fetchTasksData(user.uid);
+      alert('Task Brief posted successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to post task brief');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -591,113 +692,282 @@ export default function Dashboard() {
         </div>
       )}
 
-      <section className="projects-section">
-        <div className="section-header">
-          <h2>Your Projects</h2>
-        </div>
-        {fetchError && (
-          <div className="upload-error" style={{ marginBottom: '2rem' }}>
-            <AlertCircle size={18} />
-            <span>{fetchError}</span>
+      {/* Tabs Sub-Navigation */}
+      <div className="dashboard-tabs">
+        <button className={`tab-btn ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>
+          My Projects
+        </button>
+        <button className={`tab-btn ${activeTab === 'gigs' ? 'active' : ''}`} onClick={() => setActiveTab('gigs')}>
+          Find Gigs
+        </button>
+        <button className={`tab-btn ${activeTab === 'applications' ? 'active' : ''}`} onClick={() => setActiveTab('applications')}>
+          My Applications
+        </button>
+        <button className={`tab-btn ${activeTab === 'client-board' ? 'active' : ''}`} onClick={() => setActiveTab('client-board')}>
+          Client Board
+        </button>
+        <button className={`tab-btn ${activeTab === 'payouts' ? 'active' : ''}`} onClick={() => setActiveTab('payouts')}>
+          Payouts &amp; Balance
+        </button>
+        <button className={`tab-btn ${activeTab === 'audience' ? 'active' : ''}`} onClick={() => setActiveTab('audience')}>
+          Audience
+        </button>
+      </div>
+
+      {activeTab === 'projects' && (
+        <section className="projects-section animate-fade-in">
+          <div className="section-header">
+            <h2>Your Projects</h2>
           </div>
-        )}
-        <div className="projects-grid">
-          {projects.length > 0 ? (
-            projects.map((proj) => (
-              <ProjectRow
-                key={proj.id}
-                id={proj.id}
-                title={proj.title || proj.fileName}
-                price={`KSh ${parseFloat(proj.price || 0).toLocaleString()}`}
-                status={proj.status || 'Pending'}
-                date={proj.createdAt?.toDate ? proj.createdAt.toDate().toLocaleDateString() : 'Just now'}
-                resourceType={proj.resourceType}
-                fileSize={proj.fileSize}
-                views={proj.views}
-                sales={proj.sales}
-                onAddDiscount={setDiscountProject}
-              />
-            ))
-          ) : (
-            <div className="empty-state">
-              <p>No projects yet. Click "New Project" to start.</p>
+          {fetchError && (
+            <div className="upload-error" style={{ marginBottom: '2rem' }}>
+              <AlertCircle size={18} />
+              <span>{fetchError}</span>
             </div>
           )}
-        </div>
-      </section>
+          <div className="projects-grid">
+            {projects.length > 0 ? (
+              projects.map((proj) => (
+                <ProjectRow
+                  key={proj.id}
+                  id={proj.id}
+                  title={proj.title || proj.fileName}
+                  price={`KSh ${parseFloat(proj.price || 0).toLocaleString()}`}
+                  status={proj.status || 'Pending'}
+                  date={proj.createdAt?.toDate ? proj.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                  resourceType={proj.resourceType}
+                  fileSize={proj.fileSize}
+                  views={proj.views}
+                  sales={proj.sales}
+                  onAddDiscount={setDiscountProject}
+                />
+              ))
+            ) : (
+              <div className="empty-state">
+                <p>No projects yet. Click "New Project" to start.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
-      <section className="payouts-section" style={{ marginTop: '4rem' }}>
-        <h2>Payout History</h2>
-        <div className="payouts-list glass-card">
-          {withdrawals.length > 0 ? (
-            <table className="payout-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Amount</th>
-                  <th>Destination</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {withdrawals.map((w) => (
-                  <tr key={w.id}>
-                    <td>{w.createdAt?.toDate ? w.createdAt.toDate().toLocaleDateString() : 'Pending'}</td>
-                    <td><strong>KSh {w.amount?.toLocaleString()}</strong></td>
-                    <td>{w.phoneNumber}</td>
-                    <td>
-                      <span className={`status-pill ${w.status}`}>
-                        {w.status}
-                      </span>
-                    </td>
+      {activeTab === 'gigs' && (
+        <section className="projects-section animate-fade-in">
+          <div className="section-header">
+            <h2>Browse Creator Gigs</h2>
+            <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Solve open briefs, upload files with watermark, and get paid.</p>
+          </div>
+          {loadingTasks ? (
+            <div className="loading-state" style={{ display: 'flex', justifyContent: 'center', padding: '3rem 0' }}>
+              <Loader2 className="spin" size={24} />
+            </div>
+          ) : allMarketplaceTasks.length > 0 ? (
+            <div className="marketplace-gigs-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginTop: '1.5rem' }}>
+              {allMarketplaceTasks.map(t => (
+                <div key={t.id} className="gig-card-dash glass-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.5rem', border: '1px solid var(--card-border)', borderRadius: '12px', background: 'white' }}>
+                  <span className="gig-cat-tag" style={{ alignSelf: 'flex-start', background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.2rem 0.6rem', borderRadius: '100px', fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.8rem' }}>{t.category}</span>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '0.5rem', minHeight: '2.5rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.title}</h3>
+                  <p className="gig-summary" style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.2rem', flex: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>{t.description}</p>
+                  <div className="gig-footer-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '0.8rem' }}>
+                    <span className="gig-price-tag" style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '1.1rem' }}>KSh {parseFloat(t.budget).toLocaleString()}</span>
+                    <Link href={`/tasks/${t.id}`} className="btn-text" style={{ fontSize: '0.85rem' }}>
+                      View &amp; Apply →
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <p>No active briefs available from other clients at the moment.</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeTab === 'applications' && (
+        <section className="projects-section animate-fade-in">
+          <div className="section-header">
+            <h2>My Applications &amp; Deliverables</h2>
+          </div>
+          {loadingTasks ? (
+            <div className="loading-state" style={{ display: 'flex', justifyContent: 'center', padding: '3rem 0' }}>
+              <Loader2 className="spin" size={24} />
+            </div>
+          ) : myApplications.length > 0 ? (
+            <div className="payouts-list glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <table className="payout-table">
+                <thead>
+                  <tr>
+                    <th>Brief Title</th>
+                    <th>Category</th>
+                    <th>Pitch / Remarks</th>
+                    <th>Price</th>
+                    <th>Submission Status</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {myApplications.map(app => (
+                    <tr key={app.id}>
+                      <td><strong>{app.taskTitle || 'Task Brief'}</strong></td>
+                      <td>{app.taskCategory}</td>
+                      <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.description}</td>
+                      <td>KSh {parseFloat(app.projectPrice || app.taskBudget || 0).toLocaleString()}</td>
+                      <td>
+                        <span className={`status-pill ${app.status === 'paid' ? 'completed' : 'pending'}`}>
+                          {app.status === 'paid' ? 'Paid & Unlocked' : 'Pending Review'}
+                        </span>
+                      </td>
+                      <td>
+                        <Link href={`/tasks/${app.taskId}`} className="btn-text">
+                          View details
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="empty-state">
-              <p>No withdrawal history yet.</p>
+              <p>You haven't submitted any deliverables for client briefs yet.</p>
             </div>
           )}
-        </div>
-      </section>
+        </section>
+      )}
 
-      <section className="audience-section" style={{ marginTop: '4rem' }}>
-        <div className="section-header">
-          <h2>Your Audience</h2>
-          {audience.length > 0 && (
-            <button className="btn-secondary" onClick={exportAudienceCSV}>
-              Export to CSV
+      {activeTab === 'client-board' && (
+        <section className="projects-section animate-fade-in">
+          <div className="section-header">
+            <h2>My Posted Task Briefs</h2>
+            <button className="btn-primary" onClick={() => setIsPostingBriefModalOpen(true)}>
+              <Plus size={16} /> Post New Brief
             </button>
-          )}
-        </div>
-        <div className="audience-list glass-card">
-          {audience.length > 0 ? (
-            <table className="payout-table">
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Last Purchase</th>
-                  <th>Total Spent</th>
-                </tr>
-              </thead>
-              <tbody>
-                {audience.map((a, idx) => (
-                  <tr key={idx}>
-                    <td>{a.email}</td>
-                    <td>{a.lastPurchase.toLocaleDateString()}</td>
-                    <td><strong>KSh {a.totalSpent?.toLocaleString()}</strong></td>
+          </div>
+          {loadingTasks ? (
+            <div className="loading-state" style={{ display: 'flex', justifyContent: 'center', padding: '3rem 0' }}>
+              <Loader2 className="spin" size={24} />
+            </div>
+          ) : myPostedTasks.length > 0 ? (
+            <div className="payouts-list glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <table className="payout-table">
+                <thead>
+                  <tr>
+                    <th>Brief Title</th>
+                    <th>Category</th>
+                    <th>Budget</th>
+                    <th>Submissions</th>
+                    <th>Status</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {myPostedTasks.map(t => (
+                    <tr key={t.id}>
+                      <td><strong>{t.title}</strong></td>
+                      <td>{t.category}</td>
+                      <td>KSh {parseFloat(t.budget).toLocaleString()}</td>
+                      <td><strong>{t.submissionsCount || 0} submissions</strong></td>
+                      <td>
+                        <span className={`status-pill ${t.status === 'open' ? 'completed' : 'rejected'}`}>
+                          {t.status === 'open' ? 'Open' : 'Closed'}
+                        </span>
+                      </td>
+                      <td>
+                        <Link href={`/tasks/${t.id}`} className="btn-text">
+                          Review Submissions →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="empty-state">
-              <p>No audience members yet. They will appear here when they buy your products.</p>
+              <p>You haven't posted any task briefs yet. Click "Post New Brief" to start hiring.</p>
             </div>
           )}
-        </div>
-      </section>
+        </section>
+      )}
+
+      {activeTab === 'payouts' && (
+        <section className="payouts-section animate-fade-in" style={{ marginTop: '0rem' }}>
+          <h2>Payout History</h2>
+          <div className="payouts-list glass-card">
+            {withdrawals.length > 0 ? (
+              <table className="payout-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Destination</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {withdrawals.map((w) => (
+                    <tr key={w.id}>
+                      <td>{w.createdAt?.toDate ? w.createdAt.toDate().toLocaleDateString() : 'Pending'}</td>
+                      <td><strong>KSh {w.amount?.toLocaleString()}</strong></td>
+                      <td>{w.phoneNumber}</td>
+                      <td>
+                        <span className={`status-pill ${w.status}`}>
+                          {w.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="empty-state">
+                <p>No withdrawal history yet.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'audience' && (
+        <section className="audience-section animate-fade-in" style={{ marginTop: '0rem' }}>
+          <div className="section-header">
+            <h2>Your Audience</h2>
+            {audience.length > 0 && (
+              <button className="btn-secondary" onClick={exportAudienceCSV}>
+                Export to CSV
+              </button>
+            )}
+          </div>
+          <div className="audience-list glass-card">
+            {audience.length > 0 ? (
+              <table className="payout-table">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Last Purchase</th>
+                    <th>Total Spent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audience.map((a, idx) => (
+                    <tr key={idx}>
+                      <td>{a.email}</td>
+                      <td>{a.lastPurchase.toLocaleDateString()}</td>
+                      <td><strong>KSh {a.totalSpent?.toLocaleString()}</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="empty-state">
+                <p>No audience members yet. They will appear here when they buy your products.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {isUploading && (
         <div className="modal-overlay">
@@ -1026,7 +1296,116 @@ export default function Dashboard() {
         </div>
       )}
 
+      {isPostingBriefModalOpen && (
+        <div className="modal-overlay">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="upload-modal glass-card">
+            <h3>Post a Task Brief</h3>
+            <p style={{ opacity: 0.6, fontSize: '0.9rem', marginBottom: '1.5rem' }}>Hire Kenyan creators to complete your digital tasks.</p>
+
+            <form onSubmit={handlePostBriefFromDashboard}>
+              <div className="input-group">
+                <label>Brief Title</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Clean Landing Page Figma Design" 
+                  value={briefTitle}
+                  onChange={(e) => setBriefTitle(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="input-group">
+                <label>Description &amp; Requirements</label>
+                <textarea 
+                  rows="4"
+                  placeholder="Explain requirements, deliverables, budget details..." 
+                  value={briefDesc}
+                  onChange={(e) => setBriefDesc(e.target.value)}
+                  style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)', background: '#F8FAFC' }}
+                  required
+                />
+              </div>
+
+              <div className="input-group">
+                <label>Category</label>
+                <select 
+                  value={briefCategory} 
+                  onChange={(e) => setBriefCategory(e.target.value)}
+                  style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)', marginBottom: '1.5rem' }}
+                >
+                  <option value="Graphic Design">Graphic Design</option>
+                  <option value="Web & UI/UX Design">Web &amp; UI/UX Design</option>
+                  <option value="App & Web Dev">App &amp; Web Dev</option>
+                  <option value="Architecture & 3D">Architecture &amp; 3D</option>
+                  <option value="Digital Art & Content">Digital Art &amp; Content</option>
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label>Budget (KSh)</label>
+                <input 
+                  type="number" 
+                  placeholder="e.g. 5000" 
+                  value={briefBudget}
+                  onChange={(e) => setBriefBudget(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="input-group">
+                <label>Deadline Date</label>
+                <input 
+                  type="date" 
+                  value={briefDeadline}
+                  onChange={(e) => setBriefDeadline(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={() => setIsPostingBriefModalOpen(false)}>Close</button>
+                <button type="submit" className="btn-primary" disabled={isProcessing}>
+                  {isProcessing ? 'Posting...' : 'Post Brief'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
       <style jsx>{`
+        .dashboard-tabs {
+          display: flex;
+          gap: 0.5rem;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+          margin-bottom: 2.5rem;
+          overflow-x: auto;
+          padding-bottom: 0.5rem;
+        }
+
+        .tab-btn {
+          background: transparent;
+          border: none;
+          padding: 0.75rem 1.25rem;
+          font-weight: 600;
+          font-size: 0.95rem;
+          color: #64748b;
+          cursor: pointer;
+          border-bottom: 2px solid transparent;
+          transition: all 0.2s;
+          white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+          color: var(--primary);
+        }
+
+        .tab-btn.active {
+          color: var(--primary);
+          border-bottom-color: var(--primary);
+          font-weight: 700;
+        }
+
         .dashboard-container {
           padding: 2rem 4rem;
           max-width: 1400px;

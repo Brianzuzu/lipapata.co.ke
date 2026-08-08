@@ -3,14 +3,47 @@
 import { ShieldCheck, Upload, CreditCard, ChevronRight, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, limit, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { AnimatePresence, motion } from 'framer-motion';
+
+const CATEGORIES = [
+  { name: 'Graphic Design', icon: '🎨', desc: 'Logos, branding, social media graphics' },
+  { name: 'Web & UI/UX Design', icon: '🌐', desc: 'Figma mockups, user flows, web layouts' },
+  { name: 'App & Web Dev', icon: '📱', desc: 'React, Next.js, Flutter, backend APIs' },
+  { name: 'Architecture & 3D', icon: '🏡', desc: 'Floor plans, interior design, 3D renders' },
+  { name: 'Digital Art & Content', icon: '✍️', desc: 'Illustrations, copywriting, video editing' }
+];
+
+const MOCK_TASKS = [
+  {
+    id: 'mock_task_1',
+    title: 'Minimalist Tech Logo Design',
+    category: 'Graphic Design',
+    budget: 3500,
+    clientName: 'Nairobi Fintech Ltd'
+  },
+  {
+    id: 'mock_task_2',
+    title: 'Next.js Landing Page Development',
+    category: 'Web & UI/UX Design',
+    budget: 15000,
+    clientName: 'Keja Rentals'
+  },
+  {
+    id: 'mock_task_3',
+    title: '3D Render of modern 4-Bedroom Villa',
+    category: 'Architecture & 3D',
+    budget: 25000,
+    clientName: 'Alpha Developers'
+  }
+];
 
 export default function Home() {
   const [ads, setAds] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
     const fetchAds = async () => {
@@ -23,6 +56,20 @@ export default function Home() {
       }
     };
     fetchAds();
+  }, []);
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const q = query(collection(db, 'tasks'), where('status', '==', 'open'), limit(3));
+        const snapshot = await getDocs(q);
+        const taskList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setTasks(taskList);
+      } catch (err) {
+        console.error("Error fetching tasks:", err);
+      }
+    };
+    fetchTasks();
   }, []);
 
   useEffect(() => {
@@ -46,6 +93,7 @@ export default function Home() {
         {/* Desktop links */}
         <div className="nav-links">
           <a href="#features">Features</a>
+          <Link href="/tasks">Browse Tasks</Link>
           <a href="#how-it-works">How it Works</a>
           <Link href="/login" className="login-link">Login</Link>
           <Link href="/dashboard">
@@ -74,6 +122,7 @@ export default function Home() {
             </button>
             <nav className="mobile-nav-links">
               <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
+              <Link href="/tasks" onClick={() => setMobileMenuOpen(false)}>Browse Tasks</Link>
               <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)}>How it Works</a>
               <Link href="/login" onClick={() => setMobileMenuOpen(false)} style={{ color: 'var(--primary)', fontWeight: 800 }}>Login</Link>
               <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
@@ -191,7 +240,57 @@ export default function Home() {
           />
         </div>
       </section>
-<section id="how-it-works" className="how-it-works">
+
+      {/* Creator Ecosystem Categories */}
+      <section className="categories-section">
+        <div className="section-title">
+          <h2>Kenyan Creator Ecosystem</h2>
+          <p>Hire skilled professionals or solve briefs in these key digital categories</p>
+        </div>
+        <div className="categories-grid">
+          {CATEGORIES.map((cat, idx) => (
+            <div key={idx} className="category-card glass-card">
+              <span className="category-icon">{cat.icon}</span>
+              <h3>{cat.name}</h3>
+              <p>{cat.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Active Client Briefs & Tasks */}
+      <section className="tasks-section">
+        <div className="section-title-row">
+          <div>
+            <h2>Active Client Briefs</h2>
+            <p>Creators are submitting deliverables and getting paid. Submit yours now!</p>
+          </div>
+          <Link href="/tasks">
+            <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              View All Gigs <ChevronRight size={16} />
+            </button>
+          </Link>
+        </div>
+        <div className="tasks-grid">
+          {(tasks.length > 0 ? tasks : MOCK_TASKS).map((task) => (
+            <div key={task.id} className="task-preview-card glass-card">
+              <span className="task-category">{task.category}</span>
+              <h3>{task.title}</h3>
+              <div className="task-meta">
+                <span>By {task.clientName}</span>
+                <span className="task-budget">KSh {parseFloat(task.budget).toLocaleString()}</span>
+              </div>
+              <Link href={`/tasks/${task.id}`}>
+                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1.5rem' }}>
+                  View Brief Details
+                </button>
+              </Link>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="how-it-works" className="how-it-works">
   <h2>How It Works</h2>
   <div className="steps">
     <div className="step">
@@ -212,6 +311,128 @@ export default function Home() {
   </div>
 </section>
       <style jsx>{`
+        .section-title {
+          text-align: center;
+          margin-bottom: 3rem;
+        }
+        .section-title h2 {
+          font-size: 2.8rem;
+          font-weight: 900;
+          margin-bottom: 0.5rem;
+          background: linear-gradient(to right, var(--primary), #000);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        .section-title p {
+          color: #475569;
+          font-size: 1.1rem;
+        }
+        .categories-section {
+          padding: 5rem 0 2rem;
+        }
+        .categories-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 1.5rem;
+        }
+        .category-card {
+          text-align: center;
+          padding: 2.5rem 1.5rem;
+          transition: all 0.3s ease;
+        }
+        .category-card:hover {
+          transform: translateY(-8px);
+          border-color: var(--primary);
+          box-shadow: 0 15px 30px rgba(34, 197, 94, 0.15);
+        }
+        .category-icon {
+          font-size: 2.8rem;
+          display: block;
+          margin-bottom: 1.2rem;
+        }
+        .category-card h3 {
+          font-size: 1.2rem;
+          margin-bottom: 0.5rem;
+          font-weight: 800;
+        }
+        .category-card p {
+          font-size: 0.88rem;
+          color: #64748b;
+          line-height: 1.5;
+        }
+
+        .tasks-section {
+          padding: 4rem 0;
+        }
+        .section-title-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          margin-bottom: 3rem;
+        }
+        .section-title-row h2 {
+          font-size: 2.8rem;
+          font-weight: 900;
+          margin-bottom: 0.5rem;
+          background: linear-gradient(to right, var(--primary), #000);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        .section-title-row p {
+          color: #475569;
+          font-size: 1.1rem;
+        }
+        .tasks-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 2rem;
+        }
+        .task-preview-card {
+          display: flex;
+          flex-direction: column;
+          padding: 2rem;
+          transition: all 0.3s ease;
+        }
+        .task-preview-card:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 12px 25px rgba(0,0,0,0.08);
+          border-color: var(--primary);
+        }
+        .task-category {
+          align-self: flex-start;
+          background: var(--primary-glow);
+          color: var(--primary);
+          padding: 0.3rem 0.8rem;
+          border-radius: 100px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          margin-bottom: 1.2rem;
+        }
+        .task-preview-card h3 {
+          font-size: 1.3rem;
+          font-weight: 800;
+          margin-bottom: 1.5rem;
+          line-height: 1.4;
+          flex: 1;
+        }
+        .task-meta {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 0.9rem;
+          border-top: 1px solid rgba(0,0,0,0.05);
+          padding-top: 1.2rem;
+        }
+        .task-meta span {
+          color: #64748b;
+          font-weight: 600;
+        }
+        .task-budget {
+          color: var(--primary) !important;
+          font-weight: 850 !important;
+          font-size: 1.15rem;
+        }
+
         .how-it-works {
           padding: 4rem 0;
           text-align: center;
@@ -566,10 +787,10 @@ export default function Home() {
           .hero-col-center { order: 2; padding: 0; }
           .hero-col-right { order: 3; max-width: 360px; margin: 0 auto; }
 
-          .hero-col-center h1 { font-size: 2.6rem; }
-          .hero-col-center p { font-size: 1rem; }
-          
           .feature-grid { grid-template-columns: repeat(2, 1fr); }
+          .categories-grid { grid-template-columns: repeat(3, 1fr); }
+          .tasks-grid { grid-template-columns: repeat(2, 1fr); }
+          .section-title h2, .section-title-row h2 { font-size: 2.2rem; }
         }
 
         /* ── Mobile (≤600px) ─────────────────── */
@@ -595,6 +816,10 @@ export default function Home() {
           .feature-grid { grid-template-columns: 1fr; }
 
           .features { padding: 2.5rem 0; }
+          .categories-grid { grid-template-columns: repeat(2, 1fr); }
+          .tasks-grid { grid-template-columns: 1fr; }
+          .section-title-row { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .section-title h2, .section-title-row h2 { font-size: 1.8rem; }
         }
       `}</style>
     </main>

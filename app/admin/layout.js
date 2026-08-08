@@ -32,7 +32,8 @@ export default function AdminLayout({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists() && userDoc.data().role === 'admin') {
+        const role = userDoc.data()?.role?.trim();
+        if (userDoc.exists() && role === 'admin') {
           setIsAdmin(true);
         } else {
           router.push('/');
