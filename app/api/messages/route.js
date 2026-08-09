@@ -24,7 +24,7 @@ export async function GET(request) {
       q = query(
         collection(db, 'task_messages'),
         where('taskId', '==', taskId),
-        where('type', '==', type),
+        where('type', '==', type || 'public_qa'),
         orderBy('createdAt', 'asc')
       );
     }
@@ -53,7 +53,7 @@ export async function POST(request) {
       submissionId: submissionId || null,
       type: type || 'public_qa',
       senderUid,
-      senderName: senderName || 'User',
+      senderName: senderName || '',
       content,
       createdAt: serverTimestamp()
     });
@@ -64,3 +64,4 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
