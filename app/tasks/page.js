@@ -6,6 +6,7 @@ import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, getDoc, d
 import { onAuthStateChanged } from 'firebase/auth';
 import { Search, Plus, Calendar, DollarSign, User, Briefcase, ChevronRight, Loader2, X, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CATEGORIES = ["All", "Graphic Design & Branding", "Web & UI/UX Design", "App & Web Dev", "Architecture & 3D", "Digital Art & Content"];
@@ -55,6 +56,7 @@ const MOCK_TASKS = [
 ];
 
 export default function TasksPage() {
+  const router = useRouter();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -301,11 +303,22 @@ export default function TasksPage() {
                   <span className="submissions-count">
                     {task.submissionsCount || 0} deliverable(s) submitted
                   </span>
-                  <Link href={`/tasks/${task.id}`} style={{ textDecoration: 'none' }}>
+                  <a 
+                    href={`/tasks/${task.id}`} 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (user) {
+                        router.push(`/tasks/${task.id}`);
+                      } else {
+                        router.push('/login');
+                      }
+                    }}
+                    style={{ textDecoration: 'none' }}
+                  >
                     <button className="btn-text-btn">
                       View Details &amp; Apply <ChevronRight size={16} />
                     </button>
-                  </Link>
+                  </a>
                 </div>
               </div>
             ))}

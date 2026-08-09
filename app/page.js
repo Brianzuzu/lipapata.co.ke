@@ -298,11 +298,18 @@ export default function Home() {
                 <span>By {task.clientName}</span>
                 <span className="task-budget">KSh {parseFloat(task.budget).toLocaleString()}</span>
               </div>
-              <Link href={`/tasks/${task.id}`}>
+              <a href={`/tasks/${task.id}`} onClick={(e) => {
+                e.preventDefault();
+                if (authUser) {
+                  router.push(`/tasks/${task.id}`);
+                } else {
+                  router.push('/login');
+                }
+              }}>
                 <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1.5rem' }}>
                   View Brief Details
                 </button>
-              </Link>
+              </a>
             </div>
           ))}
         </div>

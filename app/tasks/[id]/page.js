@@ -137,6 +137,7 @@ export default function TaskDetailPage({ params }) {
         }
       } else {
         setUserData(null);
+        window.location.href = '/login';
       }
     });
     return () => unsubscribe();
