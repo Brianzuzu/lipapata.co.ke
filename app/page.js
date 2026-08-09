@@ -4,8 +4,10 @@ import { ShieldCheck, Upload, CreditCard, ChevronRight, Menu, X } from 'lucide-r
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { collection, getDocs, orderBy, query, limit, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 
 const CATEGORIES = [
   { name: 'Graphic Design', icon: '🎨', desc: 'Logos, branding, social media graphics' },
@@ -40,10 +42,26 @@ const MOCK_TASKS = [
 ];
 
 export default function Home() {
+  const router = useRouter();
   const [ads, setAds] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tasks, setTasks] = useState([]);
+  const [authUser, setAuthUser] = useState(undefined); // undefined = loading, null = not logged in
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => setAuthUser(u));
+    return () => unsubscribe();
+  }, []);
+
+  const handleDashboardClick = (e) => {
+    e.preventDefault();
+    if (authUser) {
+      router.push('/dashboard');
+    } else {
+      router.push('/login');
+    }
+  };
 
   useEffect(() => {
     const fetchAds = async () => {
@@ -96,9 +114,9 @@ export default function Home() {
           <Link href="/tasks">Browse Tasks</Link>
           <a href="#how-it-works">How it Works</a>
           <Link href="/login" className="login-link">Login</Link>
-          <Link href="/dashboard">
+          <a href="/dashboard" onClick={handleDashboardClick}>
             <button className="btn-primary">Get Started</button>
-          </Link>
+          </a>
         </div>
         {/* Mobile hamburger */}
         <button className="hamburger" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu">
@@ -125,9 +143,9 @@ export default function Home() {
               <Link href="/tasks" onClick={() => setMobileMenuOpen(false)}>Browse Tasks</Link>
               <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)}>How it Works</a>
               <Link href="/login" onClick={() => setMobileMenuOpen(false)} style={{ color: 'var(--primary)', fontWeight: 800 }}>Login</Link>
-              <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+              <a href="/dashboard" onClick={(e) => { handleDashboardClick(e); setMobileMenuOpen(false); }}>
                 <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '1rem' }}>Get Started <ChevronRight size={18} /></button>
-              </Link>
+              </a>
             </nav>
           </motion.div>
         </div>
@@ -185,9 +203,9 @@ export default function Home() {
             The premium platform for creators to securely share assets, manage payments, and ensure instant delivery.
           </p>
           <div className="hero-actions">
-            <Link href="/dashboard">
+            <a href="/dashboard" onClick={handleDashboardClick}>
               <button className="btn-primary">Start Now <ChevronRight size={18} /></button>
-            </Link>
+            </a>
           </div>
         </motion.div>
 
