@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Plus, FileText, Banknote, Share2, Loader2, Link as LinkIcon, Home, Image, Film, AlertCircle, CheckCircle2, Clock, ExternalLink, Music, Archive, Tag } from 'lucide-react';
+import { Upload, Plus, FileText, Banknote, Share2, Loader2, Link as LinkIcon, Home, Image, Film, AlertCircle, CheckCircle2, Clock, ExternalLink, Music, Archive, Tag, Bell } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
