@@ -122,6 +122,11 @@ export default function TaskDetailPage({ params }) {
   const [reportDesc, setReportDesc] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
+  // Q&A State
+  const [qaMessages, setQaMessages] = useState([]);
+  const [newQuestion, setNewQuestion] = useState('');
+  const [isPostingQA, setIsPostingQA] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -144,12 +149,10 @@ export default function TaskDetailPage({ params }) {
         const mockTask = MOCK_TASKS[id];
         setTask(mockTask);
         if (mockTask) {
-          // Load corresponding mock submissions
           const subs = MOCK_SUBMISSIONS.filter(s => s.taskId === id);
           setSubmissions(subs);
         }
       } else {
-        // Fetch task from Firestore
         const docRef = doc(db, 'tasks', id);
         const docSnap = await getDoc(docRef);
         
@@ -158,7 +161,7 @@ export default function TaskDetailPage({ params }) {
           setTask(taskData);
           setCustomPrice(taskData.budget.toString());
           
-          // Fetch submissions for this task
+          // Fetch submissions
           const qSub = query(collection(db, 'task_submissions'), where('taskId', '==', id));
           const snapshotSub = await getDocs(qSub);
           
@@ -166,8 +169,6 @@ export default function TaskDetailPage({ params }) {
             snapshotSub.docs.map(async (docSub) => {
               const data = docSub.data();
               let submissionData = { id: docSub.id, ...data };
-              
-              // Load the associated project's details to get watermarked preview / price
               if (data.projectId) {
                 try {
                   const projDoc = await getDoc(doc(db, 'projects', data.projectId));
@@ -177,7 +178,6 @@ export default function TaskDetailPage({ params }) {
                     submissionData.projectTitle = proj.title || proj.fileName;
                     submissionData.projectPrice = proj.price;
                     
-                    // Check if this project has a completed payment transaction
                     const qTrans = query(
                       collection(db, 'transactions'),
                       where('projectId', '==', data.projectId),
@@ -197,13 +197,18 @@ export default function TaskDetailPage({ params }) {
             })
           );
           
-          // Sort submissions by date
           subsList.sort((a, b) => {
             const da = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
             const db = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
             return db - da;
           });
           setSubmissions(subsList);
+
+          // Fetch Q&A messages
+          fetch(`/api/messages?taskId=${id}&type=public_qa`)
+            .then(res => res.json())
+            .then(data => { if (data.success) setQaMessages(data.messages); })
+            .catch(err => console.error("Error fetching QA messages:", err));
         } else {
           setTask(null);
         }
@@ -214,6 +219,8 @@ export default function TaskDetailPage({ params }) {
       setLoading(false);
     }
   };
+
+
 
   useEffect(() => {
     loadTaskAndSubmissions();
@@ -478,6 +485,62 @@ export default function TaskDetailPage({ params }) {
     }
   };
 
+  const handlePostQA = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      window.location.href = '/login';
+      return;
+    }
+    if (!newQuestion.trim()) return;
+
+    setIsPostingQA(true);
+    try {
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: task.id,
+          type: 'public_qa',
+          senderUid: user.uid,
+          senderName: userData?.name || user.displayName || user.email.split('@')[0],
+          content: newQuestion.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setQaMessages(prev => [...prev, {
+          id: data.messageId,
+          taskId: task.id,
+          type: 'public_qa',
+          senderUid: user.uid,
+          senderName: userData?.name || user.displayName || user.email.split('@')[0],
+          content: newQuestion.trim(),
+          createdAt: new Date().toISOString()
+        }]);
+        setNewQuestion('');
+
+        // Notify client if creator asked
+        if (user.uid !== task.clientUid) {
+          fetch('/api/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipientUid: task.clientUid,
+              type: 'qa_asked',
+              title: 'New Question on Brief 💬',
+              message: `${userData?.name || 'A creator'} asked a question on "${task.title}".`,
+              link: `/tasks/${task.id}`
+            })
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.error("Error posting QA:", err);
+    } finally {
+      setIsPostingQA(false);
+    }
+  };
+
   const getFileIcon = (f) => {
     if (!f) return <Upload size={32} className="icon-primary" />;
     const mime = f.type || '';
@@ -603,6 +666,44 @@ export default function TaskDetailPage({ params }) {
               </div>
             </div>
           )}
+
+          {/* Public Q&A Thread */}
+          <div className="qa-section" style={{ marginTop: '2rem', padding: '1.5rem', background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <MessageSquare size={18} color="#3b82f6" /> Brief Clarification Q&amp;A
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', maxHeight: '250px', overflowY: 'auto' }}>
+              {qaMessages.length > 0 ? (
+                qaMessages.map(m => (
+                  <div key={m.id} style={{ padding: '0.75rem 1rem', borderRadius: '8px', background: m.senderUid === task.clientUid ? '#eff6ff' : '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                      <span style={{ fontWeight: 600, fontSize: '0.85rem', color: m.senderUid === task.clientUid ? '#2563eb' : '#334155' }}>
+                        {m.senderName} {m.senderUid === task.clientUid && '(Client)'}
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#1e293b' }}>{m.content}</p>
+                  </div>
+                ))
+              ) : (
+                <p style={{ color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic', margin: 0 }}>No questions asked yet. Have a question about this brief? Ask below!</p>
+              )}
+            </div>
+
+            <form onSubmit={handlePostQA} style={{ display: 'flex', gap: '0.5rem' }}>
+              <input 
+                type="text" 
+                placeholder="Ask client a public question..." 
+                value={newQuestion}
+                onChange={(e) => setNewQuestion(e.target.value)}
+                style={{ flex: 1, padding: '0.7rem 1rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                required
+              />
+              <button type="submit" className="btn-primary" disabled={isPostingQA || !newQuestion.trim()}>
+                {isPostingQA ? 'Sending...' : 'Ask'}
+              </button>
+            </form>
+          </div>
         </section>
 
         {/* Right Side: Client View (submissions list) OR Creator View (apply form) */}

@@ -69,6 +69,7 @@ export default function Dashboard() {
 
   // Marketplace & Tasks State
   const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'tasks' | 'applications' | 'client-board'
+  const [dashboardMode, setDashboardMode] = useState('creator'); // 'creator' | 'client'
   const [notifications, setNotifications] = useState([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [myPostedTasks, setMyPostedTasks] = useState([]);
@@ -719,12 +720,29 @@ export default function Dashboard() {
             <img src="/logo-v2.png" alt="Lipapata Logo" className="logo-img" />
           </Link>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <h1>{userData?.name ? `${userData.name}'s Dashboard` : userData?.email ? `${userData.email}'s Dashboard` : 'Creator Dashboard'}</h1>
-            {user?.uid && (
-              <Link href={`/portfolio/${user.uid}`} className="btn-text" style={{ fontSize: '0.9rem', width: 'fit-content' }}>
-                View My Public Portfolio →
-              </Link>
-            )}
+            <h1>{userData?.name ? `${userData.name}'s Dashboard` : userData?.email ? `${userData.email}'s Dashboard` : 'Dashboard'}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.3rem' }}>
+              {/* Mode Switcher */}
+              <div style={{ display: 'flex', background: '#e2e8f0', borderRadius: '20px', padding: '2px' }}>
+                <button 
+                  onClick={() => { setDashboardMode('creator'); setActiveTab('projects'); }}
+                  style={{ padding: '0.3rem 0.8rem', borderRadius: '18px', border: 'none', background: dashboardMode === 'creator' ? '#10b981' : 'transparent', color: dashboardMode === 'creator' ? 'white' : '#64748b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}
+                >
+                  🎨 Creator Mode
+                </button>
+                <button 
+                  onClick={() => { setDashboardMode('client'); setActiveTab('client-board'); }}
+                  style={{ padding: '0.3rem 0.8rem', borderRadius: '18px', border: 'none', background: dashboardMode === 'client' ? '#3b82f6' : 'transparent', color: dashboardMode === 'client' ? 'white' : '#64748b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}
+                >
+                  💼 Client Mode
+                </button>
+              </div>
+              {user?.uid && (
+                <Link href={`/portfolio/${user.uid}`} className="btn-text" style={{ fontSize: '0.85rem' }}>
+                  View Portfolio →
+                </Link>
+              )}
+            </div>
           </div>
         </div>
         <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -802,24 +820,34 @@ export default function Dashboard() {
 
       {/* Tabs Sub-Navigation */}
       <div className="dashboard-tabs">
-        <button className={`tab-btn ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>
-          My Projects
-        </button>
-        <button className={`tab-btn ${activeTab === 'gigs' ? 'active' : ''}`} onClick={() => setActiveTab('gigs')}>
-          Find Gigs
-        </button>
-        <button className={`tab-btn ${activeTab === 'applications' ? 'active' : ''}`} onClick={() => setActiveTab('applications')}>
-          My Applications
-        </button>
-        <button className={`tab-btn ${activeTab === 'client-board' ? 'active' : ''}`} onClick={() => setActiveTab('client-board')}>
-          Client Board
-        </button>
-        <button className={`tab-btn ${activeTab === 'payouts' ? 'active' : ''}`} onClick={() => setActiveTab('payouts')}>
-          Payouts &amp; Balance
-        </button>
-        <button className={`tab-btn ${activeTab === 'audience' ? 'active' : ''}`} onClick={() => setActiveTab('audience')}>
-          Audience
-        </button>
+        {dashboardMode === 'creator' ? (
+          <>
+            <button className={`tab-btn ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>
+              My Projects
+            </button>
+            <button className={`tab-btn ${activeTab === 'gigs' ? 'active' : ''}`} onClick={() => setActiveTab('gigs')}>
+              Find Gigs
+            </button>
+            <button className={`tab-btn ${activeTab === 'applications' ? 'active' : ''}`} onClick={() => setActiveTab('applications')}>
+              My Applications
+            </button>
+            <button className={`tab-btn ${activeTab === 'payouts' ? 'active' : ''}`} onClick={() => setActiveTab('payouts')}>
+              Payouts &amp; Balance
+            </button>
+            <button className={`tab-btn ${activeTab === 'audience' ? 'active' : ''}`} onClick={() => setActiveTab('audience')}>
+              Audience
+            </button>
+          </>
+        ) : (
+          <>
+            <button className={`tab-btn ${activeTab === 'client-board' ? 'active' : ''}`} onClick={() => setActiveTab('client-board')}>
+              My Posted Task Briefs
+            </button>
+            <button className={`tab-btn ${activeTab === 'gigs' ? 'active' : ''}`} onClick={() => setActiveTab('gigs')}>
+              Browse Marketplace
+            </button>
+          </>
+        )}
       </div>
 
       {/* ─── Creator Level Progress Widget ─────────────────── */}
