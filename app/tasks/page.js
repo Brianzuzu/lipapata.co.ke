@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db, auth } from '../../lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -74,6 +74,10 @@ export default function TasksPage() {
   const [newCategory, setNewCategory] = useState('Graphic Design & Branding');
   const [newBudget, setNewBudget] = useState('');
   const [newDeadline, setNewDeadline] = useState('');
+  const [newMaxSubmissions, setNewMaxSubmissions] = useState(10);
+  const [refFiles, setRefFiles] = useState([]);
+  const [isUploadingRef, setIsUploadingRef] = useState(false);
+  const refFileInputRef = useRef(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -132,12 +136,36 @@ export default function TasksPage() {
     setErrorMsg('');
 
     try {
+      // Upload reference files to Cloudinary if any
+      let uploadedRefFiles = [];
+      if (refFiles.length > 0) {
+        setIsUploadingRef(true);
+        const signRes = await fetch('/api/upload/sign', { method: 'POST' });
+        if (!signRes.ok) throw new Error('Failed to sign reference file uploads.');
+        const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
+        for (const file of refFiles) {
+          const isImage = file.type.startsWith('image/');
+          const resourceType = isImage ? 'image' : 'raw';
+          const fd = new FormData();
+          fd.append('file', file); fd.append('api_key', apiKey);
+          fd.append('timestamp', timestamp); fd.append('signature', signature);
+          fd.append('folder', folder);
+          const upRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, { method: 'POST', body: fd });
+          if (!upRes.ok) throw new Error(`Upload failed for ${file.name}`);
+          const upData = await upRes.json();
+          uploadedRefFiles.push({ url: upData.secure_url, name: file.name, type: file.type });
+        }
+        setIsUploadingRef(false);
+      }
+
       await addDoc(collection(db, 'tasks'), {
         title: newTitle,
         description: newDesc,
         category: newCategory,
         budget: parseFloat(newBudget),
         deadline: newDeadline,
+        maxSubmissions: newMaxSubmissions,
+        referenceFiles: uploadedRefFiles,
         clientUid: user.uid,
         clientName: userData?.name || user.displayName || user.email.split('@')[0],
         clientEmail: user.email,
@@ -146,19 +174,19 @@ export default function TasksPage() {
         createdAt: serverTimestamp()
       });
 
-      // Reset Form & Close Modal
-      setNewTitle('');
-      setNewDesc('');
-      setNewCategory('Graphic Design');
-      setNewBudget('');
-      setNewDeadline('');
+      // Notify via API (fire and forget)
+      fetch('/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientUid: user.uid, type: 'task_posted', title: 'Task Brief Posted!', message: `Your brief "${newTitle}" is now live.`, link: '/dashboard' })
+      }).catch(() => {});
+
+      setNewTitle(''); setNewDesc(''); setNewCategory('Graphic Design & Branding');
+      setNewBudget(''); setNewDeadline(''); setNewMaxSubmissions(10); setRefFiles([]);
       setIsModalOpen(false);
-      
-      // Refresh Task List
       fetchTasks();
     } catch (err) {
-      console.error("Error posting task:", err);
-      setErrorMsg('Failed to post task. Please try again.');
+      console.error('Error posting task:', err);
+      setIsUploadingRef(false);
+      setErrorMsg(err.message || 'Failed to post task. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -366,20 +394,59 @@ export default function TasksPage() {
                   </div>
                 </div>
 
+                <div className="modal-row">
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Deadline Date</label>
+                    <input 
+                      type="date" 
+                      value={newDeadline}
+                      onChange={(e) => setNewDeadline(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Max Submissions limit</label>
+                    <select value={newMaxSubmissions} onChange={(e) => setNewMaxSubmissions(Number(e.target.value))}>
+                      <option value={5}>5 (Highly selective)</option>
+                      <option value={10}>10 (Recommended)</option>
+                      <option value={15}>15 (Broad reach)</option>
+                      <option value={20}>20 (Maximum)</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="input-group">
-                  <label>Deadline Date</label>
-                  <input 
-                    type="date" 
-                    value={newDeadline}
-                    onChange={(e) => setNewDeadline(e.target.value)}
-                    required
-                  />
+                  <label>Reference Files / Moodboard (Optional)</label>
+                  <div 
+                    className="upload-dropzone" 
+                    onClick={() => refFileInputRef.current?.click()}
+                    style={{ padding: '1rem', border: '1px dashed #cbd5e1', borderRadius: '12px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc' }}
+                  >
+                    <input 
+                      type="file" 
+                      ref={refFileInputRef}
+                      onChange={(e) => {
+                        if(e.target.files && e.target.files.length > 0) {
+                          setRefFiles(Array.from(e.target.files));
+                        }
+                      }}
+                      accept="image/*,.pdf,.doc,.docx"
+                      multiple
+                      style={{ display: 'none' }}
+                    />
+                    {refFiles.length > 0 ? (
+                      <p style={{ margin: 0, fontWeight: 600, color: '#10b981' }}>{refFiles.length} file(s) selected (Click to change)</p>
+                    ) : (
+                      <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Click to attach reference images or PDFs</p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="modal-actions">
                   <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                  <button type="submit" className="btn-primary" disabled={isSubmitting}>
-                    {isSubmitting ? 'Posting brief...' : 'Post Brief Now'}
+                  <button type="submit" className="btn-primary" disabled={isSubmitting || isUploadingRef}>
+                    {isUploadingRef ? 'Uploading references...' : isSubmitting ? 'Posting brief...' : 'Post Brief Now'}
                   </button>
                 </div>
               </form>

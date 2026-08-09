@@ -17,7 +17,8 @@ import {
   Menu,
   X,
   Loader2,
-  ShieldAlert
+  ShieldAlert,
+  Flag
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -105,6 +106,9 @@ export default function AdminLayout({ children }) {
             </Link>
             <Link href="/admin/ads" onClick={() => setIsMobileMenuOpen(false)}>
               <button className={`nav-item ${pathname === '/admin/ads' ? 'active' : ''}`}><ImageIcon size={20} /> Slide Ads</button>
+            </Link>
+            <Link href="/admin/reports" onClick={() => setIsMobileMenuOpen(false)}>
+              <button className={`nav-item ${pathname === '/admin/reports' ? 'active' : ''}`}><Flag size={20} /> Reports</button>
             </Link>
             <div className="nav-divider" />
             <Link href="/admin/settings" onClick={() => setIsMobileMenuOpen(false)}>

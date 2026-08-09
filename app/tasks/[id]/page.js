@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { db, auth } from '../../../lib/firebase';
 import { doc, getDoc, collection, addDoc, query, where, getDocs, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import { ArrowLeft, Loader2, Calendar, User, DollarSign, Upload, AlertCircle, CheckCircle2, ChevronRight, MessageSquare, ExternalLink, Link as LinkIcon, FileText, Image, Film, Music, Archive } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, User, DollarSign, Upload, AlertCircle, CheckCircle2, ChevronRight, MessageSquare, ExternalLink, Link as LinkIcon, FileText, Image, Film, Music, Archive, Flag } from 'lucide-react';
 import Link from 'next/link';
 import { validateUpload } from '../../../lib/uploadConfig';
 import { calculateCommission } from '../../../lib/commission';
@@ -116,6 +116,12 @@ export default function TaskDetailPage({ params }) {
   const [uploadError, setUploadError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Report Modal State
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('Scam / Fraud');
+  const [reportDesc, setReportDesc] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -212,6 +218,67 @@ export default function TaskDetailPage({ params }) {
   useEffect(() => {
     loadTaskAndSubmissions();
   }, [id]);
+
+  useEffect(() => {
+    if (task && user && task.clientUid === user.uid && submissions.length > 0) {
+      // Mark unviewed submissions as viewed
+      const markViewed = async () => {
+        for (const sub of submissions) {
+          if (!sub.viewedAt) {
+            try {
+              await updateDoc(doc(db, 'task_submissions', sub.id), {
+                viewedAt: serverTimestamp()
+              });
+              
+              // Send notification to creator
+              fetch('/api/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  recipientUid: sub.creatorUid,
+                  type: 'submission_viewed',
+                  title: 'Submission Viewed!',
+                  message: `The client viewed your submission for "${task.title}".`,
+                  link: `/dashboard`
+                })
+              }).catch(() => {});
+            } catch (e) {
+              console.error('Error marking viewed:', e);
+            }
+          }
+        }
+      };
+      markViewed();
+    }
+  }, [task, user, submissions]);
+
+  const handleShortlist = async (sub) => {
+    try {
+      await updateDoc(doc(db, 'task_submissions', sub.id), {
+        status: 'shortlisted'
+      });
+      // Update local state
+      setSubmissions(prev => prev.map(s => s.id === sub.id ? { ...s, status: 'shortlisted' } : s));
+      
+      // Notify creator
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientUid: sub.creatorUid,
+          type: 'submission_shortlisted',
+          title: 'You were shortlisted! ⭐',
+          message: `The client shortlisted your submission for "${task.title}".`,
+          link: `/dashboard`
+        })
+      }).catch(() => {});
+      
+      alert('Submission shortlisted!');
+    } catch (e) {
+      console.error(e);
+      alert('Failed to shortlist submission.');
+    }
+  };
 
   const handleFileChange = (e) => {
     setUploadError('');
@@ -380,6 +447,37 @@ export default function TaskDetailPage({ params }) {
     }
   };
 
+  const handleReportTask = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      window.location.href = '/login';
+      return;
+    }
+    setIsSubmittingReport(true);
+    try {
+      await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportedType: 'task',
+          reportedId: task.id,
+          reportedUid: task.clientUid,
+          reporterUid: user.uid,
+          reason: reportReason,
+          description: reportDesc
+        })
+      });
+      setIsReportModalOpen(false);
+      setReportDesc('');
+      alert('Report submitted to moderation team. Thank you!');
+    } catch (e) {
+      console.error(e);
+      alert('Failed to submit report.');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const getFileIcon = (f) => {
     if (!f) return <Upload size={32} className="icon-primary" />;
     const mime = f.type || '';
@@ -439,10 +537,18 @@ export default function TaskDetailPage({ params }) {
         </div>
       </nav>
 
-      {/* Back button */}
-      <Link href="/tasks" className="back-link">
-        <ArrowLeft size={16} /> Back to marketplace
-      </Link>
+      {/* Back button & Report */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1rem 0' }}>
+        <Link href="/tasks" className="back-link" style={{ margin: 0 }}>
+          <ArrowLeft size={16} /> Back to marketplace
+        </Link>
+        <button 
+          onClick={() => setIsReportModalOpen(true)}
+          style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+        >
+          <Flag size={14} /> Report Brief
+        </button>
+      </div>
 
       <div className="task-layout">
         {/* Left Side: Task Brief Details */}
@@ -478,6 +584,25 @@ export default function TaskDetailPage({ params }) {
             <h3>Brief Description &amp; Specifications</h3>
             <p>{task.description}</p>
           </div>
+
+          {task.referenceFiles && task.referenceFiles.length > 0 && (
+            <div className="reference-files-section" style={{ marginTop: '2rem', padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: '#334155' }}>Reference Materials</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {task.referenceFiles.map((file, i) => (
+                  <a key={i} href={file.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem 1rem', background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', textDecoration: 'none', color: 'inherit' }}>
+                    <div style={{ width: '40px', height: '40px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FileText size={20} color="#3b82f6" />
+                    </div>
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <p style={{ margin: 0, fontWeight: 500, fontSize: '0.9rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{file.name}</p>
+                    </div>
+                    <ExternalLink size={16} color="#64748b" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Right Side: Client View (submissions list) OR Creator View (apply form) */}
@@ -496,7 +621,7 @@ export default function TaskDetailPage({ params }) {
                       <div className="submission-header">
                         <h4>{sub.creatorName}</h4>
                         <span className={`status-tag ${sub.status}`}>
-                          {sub.status === 'paid' ? 'Paid & Unlocked' : 'Pending Review'}
+                          {sub.status === 'paid' ? 'Paid & Unlocked' : sub.status === 'shortlisted' ? '⭐ Shortlisted' : 'Pending Review'}
                         </span>
                       </div>
                       
@@ -523,11 +648,18 @@ export default function TaskDetailPage({ params }) {
                             </button>
                           </Link>
                         ) : (
-                          <Link href={`/p/${sub.projectId}`} target="_blank" style={{ width: '100%' }}>
-                            <button className="btn-pay-action">
-                              Preview &amp; Unlock Deliverable <ChevronRight size={16} />
-                            </button>
-                          </Link>
+                          <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                            {sub.status !== 'shortlisted' && (
+                              <button className="btn-secondary" onClick={() => handleShortlist(sub)} style={{ flex: 1, justifyContent: 'center' }}>
+                                ⭐ Shortlist
+                              </button>
+                            )}
+                            <Link href={`/p/${sub.projectId}`} target="_blank" style={{ flex: 2 }}>
+                              <button className="btn-pay-action" style={{ width: '100%' }}>
+                                Preview &amp; Unlock <ChevronRight size={16} />
+                              </button>
+                            </Link>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -571,6 +703,28 @@ export default function TaskDetailPage({ params }) {
                     <a href="/tasks" style={{ display: 'inline-block', marginTop: '1rem' }}>
                       <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center' }}>Browse Other Briefs</button>
                     </a>
+                  </div>
+                );
+              }
+
+              const maxSubmissions = task.maxSubmissions || 10;
+              const isLimitReached = (task.submissionsCount || 0) >= maxSubmissions;
+
+              if (isLimitReached) {
+                return (
+                  <div className="glass-card">
+                    <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+                      <div style={{ width: '60px', height: '60px', background: '#fee2e2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                        <AlertCircle size={30} color="#ef4444" />
+                      </div>
+                      <h2 style={{ marginBottom: '1rem' }}>Submission Limit Reached</h2>
+                      <p style={{ color: '#64748b' }}>
+                        This brief has reached its maximum limit of {maxSubmissions} submissions and is no longer accepting new proposals.
+                      </p>
+                      <a href="/tasks" style={{ display: 'inline-block', marginTop: '2rem' }}>
+                        <button className="btn-primary">Browse Other Briefs</button>
+                      </a>
+                    </div>
                   </div>
                 );
               }
@@ -1219,6 +1373,36 @@ export default function TaskDetailPage({ params }) {
           }
         }
       `}</style>
+      {/* Report Modal */}
+      {isReportModalOpen && (
+        <div className="modal-overlay">
+          <div className="glass-card" style={{ maxWidth: '450px', width: '100%', padding: '2rem' }}>
+            <h3 style={{ marginTop: 0 }}>Report Brief</h3>
+            <p style={{ color: '#64748b', fontSize: '0.9rem' }}>If this task brief violates Lipapata rules or involves copyright infringement, let us know.</p>
+            <form onSubmit={handleReportTask}>
+              <div className="input-group" style={{ margin: '1rem 0' }}>
+                <label>Reason for Report</label>
+                <select value={reportReason} onChange={(e) => setReportReason(e.target.value)} style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                  <option value="Copyright Infringement">Copyright Infringement / Stolen Content</option>
+                  <option value="Scam / Fraud">Scam / Fraud / Unreasonable Demands</option>
+                  <option value="Inappropriate Content">Inappropriate Content</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                <label>Details / Explanation</label>
+                <textarea rows={3} value={reportDesc} onChange={(e) => setReportDesc(e.target.value)} placeholder="Provide additional details..." style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} required />
+              </div>
+              <div className="modal-actions" style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn-secondary" onClick={() => setIsReportModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isSubmittingReport}>
+                  {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

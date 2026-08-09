@@ -3,8 +3,15 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { Loader2, Globe, Music, Film, FileText, Archive, ShoppingBag, Package, Image } from 'lucide-react';
+import { Loader2, Globe, Music, Film, FileText, Archive, ShoppingBag, Package, Image, Star, Award, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
+
+const LEVEL_ACCESS = [
+  { level: 1, label: 'New Talent',  badge: '🌱', color: '#64748b' },
+  { level: 2, label: 'Rising Star', badge: '⭐', color: '#f59e0b' },
+  { level: 3, label: 'Pro',         badge: '🚀', color: '#3b82f6' },
+  { level: 4, label: 'Elite',       badge: '💎', color: '#10b981' },
+];
 
 /* ─── Social icons ─── */
 const TikTokIcon = ({ size = 16 }) => (
@@ -97,6 +104,7 @@ export default function CreatorPortfolio({ params }) {
   const { id } = params;
   const [creator, setCreator]   = useState(null);
   const [projects, setProjects] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [filter, setFilter]     = useState('all');
   const [copied, setCopied]     = useState(false);
@@ -112,6 +120,9 @@ export default function CreatorPortfolio({ params }) {
             .map(d => ({ id: d.id, ...d.data() }))
             .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0))
         );
+        const subSnap = await getDocs(query(collection(db, 'task_submissions'), where('creatorUid', '==', id)));
+        setSubmissions(subSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
@@ -174,6 +185,25 @@ export default function CreatorPortfolio({ params }) {
           </div>
 
           <h1 className="pf-name">{creator.name || 'Creator'}</h1>
+          
+          {/* Creator Level & Star Rating Badge */}
+          {(() => {
+            const lvl = LEVEL_ACCESS.find(l => l.level === (creator.creatorLevel || 1)) || LEVEL_ACCESS[0];
+            const avgRating = creator.ratingCount > 0 ? (creator.ratingSum / creator.ratingCount).toFixed(1) : null;
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', margin: '0.5rem 0 1rem' }}>
+                <span style={{ padding: '0.3rem 0.8rem', borderRadius: '20px', background: `${lvl.color}15`, color: lvl.color, border: `1px solid ${lvl.color}40`, fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  {lvl.badge} Level {lvl.level} - {lvl.label}
+                </span>
+                {avgRating && (
+                  <span style={{ padding: '0.3rem 0.8rem', borderRadius: '20px', background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <Star size={14} fill="#d97706" /> {avgRating} ({creator.ratingCount})
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+
           <p className="pf-bio">{creator.bio || 'Digital creator making awesome things.'}</p>
 
           {/* Socials */}
@@ -190,7 +220,9 @@ export default function CreatorPortfolio({ params }) {
             <div className="pf-sdiv"/>
             <div className="pf-stat"><span className="pf-sval">{totalSales}</span><span className="pf-slbl">Sales</span></div>
             <div className="pf-sdiv"/>
-            <div className="pf-stat"><span className="pf-sval">{[...new Set(projects.map(p=>p.resourceType))].filter(Boolean).length || 1}</span><span className="pf-slbl">Categories</span></div>
+            <div className="pf-stat"><span className="pf-sval">{submissions.length}</span><span className="pf-slbl">Briefs Pitched</span></div>
+            <div className="pf-sdiv"/>
+            <div className="pf-stat"><span className="pf-sval">{submissions.length > 0 ? `${Math.round((submissions.filter(s=>s.status==='paid'||s.status==='shortlisted').length / submissions.length)*100)}%` : '100%'}</span><span className="pf-slbl">Win Rate</span></div>
           </div>
         </div>
       </header>

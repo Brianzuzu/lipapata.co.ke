@@ -68,7 +68,9 @@ export default function Dashboard() {
   });
 
   // Marketplace & Tasks State
-  const [activeTab, setActiveTab] = useState('projects');
+  const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'tasks' | 'applications' | 'client-board'
+  const [notifications, setNotifications] = useState([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [myPostedTasks, setMyPostedTasks] = useState([]);
   const [myApplications, setMyApplications] = useState([]);
   const [allMarketplaceTasks, setAllMarketplaceTasks] = useState([]);
@@ -80,6 +82,10 @@ export default function Dashboard() {
   const [briefCategory, setBriefCategory] = useState('Graphic Design');
   const [briefBudget, setBriefBudget] = useState('');
   const [briefDeadline, setBriefDeadline] = useState('');
+  const [briefMaxSubmissions, setBriefMaxSubmissions] = useState(10);
+  const [briefRefFiles, setBriefRefFiles] = useState([]);
+  const [isUploadingBriefRef, setIsUploadingBriefRef] = useState(false);
+  const briefRefFileInputRef = useRef(null);
 
   const userPlan = 'FREE'; // Will be dynamic later
   
@@ -263,6 +269,13 @@ export default function Dashboard() {
       // Fetch applications submitted by this user (My Applications)
       const qApps = query(collection(db, 'task_submissions'), where('creatorUid', '==', uid));
       const snapApps = await getDocs(qApps);
+      
+      // Fetch user notifications
+      const qNotif = query(collection(db, 'notifications'), where('recipientUid', '==', uid), orderBy('createdAt', 'desc'));
+      getDocs(qNotif).then(snapNotif => {
+        setNotifications(snapNotif.docs.map(d => ({ id: d.id, ...d.data() })));
+      }).catch(err => console.error("Error fetching notifications:", err));
+
       const appsList = await Promise.all(snapApps.docs.map(async (docSub) => {
         const data = docSub.data();
         let appData = { id: docSub.id, ...data };
@@ -316,12 +329,36 @@ export default function Dashboard() {
 
     setIsProcessing(true);
     try {
+      // Upload reference files to Cloudinary if any
+      let uploadedRefFiles = [];
+      if (briefRefFiles.length > 0) {
+        setIsUploadingBriefRef(true);
+        const signRes = await fetch('/api/upload/sign', { method: 'POST' });
+        if (!signRes.ok) throw new Error('Failed to sign reference file uploads.');
+        const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
+        for (const file of briefRefFiles) {
+          const isImage = file.type.startsWith('image/');
+          const resourceType = isImage ? 'image' : 'raw';
+          const fd = new FormData();
+          fd.append('file', file); fd.append('api_key', apiKey);
+          fd.append('timestamp', timestamp); fd.append('signature', signature);
+          fd.append('folder', folder);
+          const upRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, { method: 'POST', body: fd });
+          if (!upRes.ok) throw new Error(`Upload failed for ${file.name}`);
+          const upData = await upRes.json();
+          uploadedRefFiles.push({ url: upData.secure_url, name: file.name, type: file.type });
+        }
+        setIsUploadingBriefRef(false);
+      }
+
       await addDoc(collection(db, 'tasks'), {
         title: briefTitle,
         description: briefDesc,
         category: briefCategory,
         budget: parseFloat(briefBudget),
         deadline: briefDeadline,
+        maxSubmissions: briefMaxSubmissions,
+        referenceFiles: uploadedRefFiles,
         clientUid: user.uid,
         clientName: userData?.name || user.displayName || user.email.split('@')[0],
         clientEmail: user.email,
@@ -329,16 +366,25 @@ export default function Dashboard() {
         submissionsCount: 0,
         createdAt: serverTimestamp()
       });
+
+      // Notify via API (fire and forget)
+      fetch('/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientUid: user.uid, type: 'task_posted', title: 'Task Brief Posted!', message: `Your brief "${briefTitle}" is now live.`, link: '/dashboard' })
+      }).catch(() => {});
+
       setIsPostingBriefModalOpen(false);
       setBriefTitle('');
       setBriefDesc('');
       setBriefBudget('');
       setBriefDeadline('');
+      setBriefMaxSubmissions(10);
+      setBriefRefFiles([]);
       fetchTasksData(user.uid);
       alert('Task Brief posted successfully!');
     } catch (err) {
       console.error(err);
-      alert('Failed to post task brief');
+      setIsUploadingBriefRef(false);
+      alert(err.message || 'Failed to post task brief');
     } finally {
       setIsProcessing(false);
     }
@@ -681,7 +727,42 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-        <div className="header-right">
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* Notification Bell */}
+          <div style={{ relative: 'position', position: 'relative' }}>
+            <button 
+              className="btn-secondary" 
+              onClick={() => setIsNotifOpen(!isNotifOpen)}
+              style={{ padding: '0.6rem 0.8rem', borderRadius: '50%', position: 'relative' }}
+            >
+              <Bell size={20} />
+              {notifications.filter(n => !n.read).length > 0 && (
+                <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#ef4444', color: 'white', fontSize: '0.7rem', fontWeight: 'bold', width: '18px', height: '18px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {notifications.filter(n => !n.read).length}
+                </span>
+              )}
+            </button>
+            {isNotifOpen && (
+              <div className="glass-card" style={{ position: 'absolute', right: 0, top: '50px', width: '320px', zIndex: 100, padding: '1rem', boxShadow: '0 10px 25px rgba(0,0,0,0.15)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Notifications</h4>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{notifications.length} total</span>
+                </div>
+                <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {notifications.length > 0 ? (
+                    notifications.map(n => (
+                      <div key={n.id} style={{ padding: '0.6rem', borderRadius: '8px', background: n.read ? '#f8fafc' : '#eff6ff', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
+                        <p style={{ margin: 0, fontWeight: 600, color: '#1e293b' }}>{n.title}</p>
+                        <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.8rem' }}>{n.message}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p style={{ margin: 0, padding: '1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No notifications yet</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <button className="btn-secondary" onClick={() => setIsEditingProfile(true)}>
             Storefront Settings
           </button>
@@ -700,6 +781,16 @@ export default function Dashboard() {
         />
         <StatCard title="Total Earned" value={`KSh ${totalEarned.toLocaleString()}`} icon={<CheckCircle2 opacity={0.5} />} />
         <StatCard title="Withdrawn" value={`KSh ${totalWithdrawn.toLocaleString()}`} icon={<ExternalLink size={20} opacity={0.5} />} />
+        <StatCard 
+          title="Pending Earnings" 
+          value={`KSh ${myApplications.filter(a => a.status === 'shortlisted').reduce((acc, a) => acc + (parseFloat(a.projectPrice || a.taskBudget || 0)), 0).toLocaleString()}`} 
+          icon={<Clock color="#f59e0b" />} 
+        />
+        <StatCard 
+          title="Shortlisted Briefs" 
+          value={myApplications.filter(a => a.status === 'shortlisted').length.toString()} 
+          icon={<CheckCircle2 color="#3b82f6" />} 
+        />
       </section>
 
       {pendingWithdrawal > 0 && (
@@ -886,8 +977,8 @@ export default function Dashboard() {
                       <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.description}</td>
                       <td>KSh {parseFloat(app.projectPrice || app.taskBudget || 0).toLocaleString()}</td>
                       <td>
-                        <span className={`status-pill ${app.status === 'paid' ? 'completed' : 'pending'}`}>
-                          {app.status === 'paid' ? 'Paid & Unlocked' : 'Pending Review'}
+                        <span className={`status-pill ${app.status === 'paid' ? 'completed' : app.status === 'shortlisted' ? 'active' : 'pending'}`}>
+                          {app.status === 'paid' ? 'Paid & Unlocked' : app.status === 'shortlisted' ? '⭐ Shortlisted' : app.viewedAt ? '👁️ Viewed' : 'Pending Review'}
                         </span>
                       </td>
                       <td>
@@ -1426,20 +1517,63 @@ export default function Dashboard() {
                 />
               </div>
 
-              <div className="input-group">
-                <label>Deadline Date</label>
-                <input 
-                  type="date" 
-                  value={briefDeadline}
-                  onChange={(e) => setBriefDeadline(e.target.value)}
-                  required
-                />
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className="input-group" style={{ flex: 1 }}>
+                  <label>Deadline Date</label>
+                  <input 
+                    type="date" 
+                    value={briefDeadline}
+                    onChange={(e) => setBriefDeadline(e.target.value)}
+                    style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)' }}
+                    required
+                  />
+                </div>
+                <div className="input-group" style={{ flex: 1 }}>
+                  <label>Max Submissions limit</label>
+                  <select 
+                    value={briefMaxSubmissions} 
+                    onChange={(e) => setBriefMaxSubmissions(Number(e.target.value))}
+                    style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)' }}
+                  >
+                    <option value={5}>5 (Highly selective)</option>
+                    <option value={10}>10 (Recommended)</option>
+                    <option value={15}>15 (Broad reach)</option>
+                    <option value={20}>20 (Maximum)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                <label>Reference Files / Moodboard (Optional)</label>
+                <div 
+                  className="upload-dropzone" 
+                  onClick={() => briefRefFileInputRef.current?.click()}
+                  style={{ padding: '1rem', border: '1px dashed #cbd5e1', borderRadius: '12px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc' }}
+                >
+                  <input 
+                    type="file" 
+                    ref={briefRefFileInputRef}
+                    onChange={(e) => {
+                      if(e.target.files && e.target.files.length > 0) {
+                        setBriefRefFiles(Array.from(e.target.files));
+                      }
+                    }}
+                    accept="image/*,.pdf,.doc,.docx"
+                    multiple
+                    style={{ display: 'none' }}
+                  />
+                  {briefRefFiles.length > 0 ? (
+                    <p style={{ margin: 0, fontWeight: 600, color: '#10b981' }}>{briefRefFiles.length} file(s) selected (Click to change)</p>
+                  ) : (
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Click to attach reference images or PDFs</p>
+                  )}
+                </div>
               </div>
 
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={() => setIsPostingBriefModalOpen(false)}>Close</button>
-                <button type="submit" className="btn-primary" disabled={isProcessing}>
-                  {isProcessing ? 'Posting...' : 'Post Brief'}
+                <button type="submit" className="btn-primary" disabled={isProcessing || isUploadingBriefRef}>
+                  {isUploadingBriefRef ? 'Uploading references...' : isProcessing ? 'Posting brief...' : 'Post Task Brief'}
                 </button>
               </div>
             </form>
