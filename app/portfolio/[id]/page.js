@@ -206,6 +206,22 @@ export default function CreatorPortfolio({ params }) {
 
           <p className="pf-bio">{creator.bio || 'Digital creator making awesome things.'}</p>
 
+          {/* Category & Skills Tags */}
+          {(creator.category || (creator.skills && creator.skills.length > 0)) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center', margin: '1rem 0' }}>
+              {creator.category && (
+                <span style={{ padding: '0.35rem 0.9rem', borderRadius: '20px', background: '#dbeafe', color: '#1d4ed8', fontSize: '0.82rem', fontWeight: 700 }}>
+                  {creator.category}
+                </span>
+              )}
+              {Array.isArray(creator.skills) && creator.skills.map((skill, i) => (
+                <span key={i} style={{ padding: '0.35rem 0.9rem', borderRadius: '20px', background: '#f1f5f9', color: '#475569', fontSize: '0.82rem', fontWeight: 500, border: '1px solid #e2e8f0' }}>
+                  {skill}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Socials */}
           <div className="pf-socials">
             {creator.website  && <a href={creator.website}  target="_blank" rel="noreferrer" className="pf-pill"><Globe size={14}/> Website</a>}

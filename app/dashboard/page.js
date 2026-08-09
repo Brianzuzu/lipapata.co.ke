@@ -61,11 +61,19 @@ export default function Dashboard() {
   // Profile State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState({
+    name: '',
     bio: '',
     website: '',
     tiktok: '',
-    instagram: ''
+    instagram: '',
+    whatsapp: '',
+    category: '',
+    skills: '',
   });
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef(null);
 
   // Marketplace & Tasks State
   const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'tasks' | 'applications' | 'client-board'
@@ -204,11 +212,16 @@ export default function Dashboard() {
           const data = d.data();
           setProfileData(prev => ({
             ...prev,
+            name: data.name || '',
             bio: data.bio || '',
             website: data.website || '',
             tiktok: data.tiktok || '',
-            instagram: data.instagram || ''
+            instagram: data.instagram || '',
+            whatsapp: data.whatsapp || '',
+            category: data.category || '',
+            skills: Array.isArray(data.skills) ? data.skills.join(', ') : (data.skills || ''),
           }));
+          if (data.photoURL) setAvatarPreview(data.photoURL);
         }
       });
 
@@ -666,14 +679,52 @@ export default function Dashboard() {
     e.preventDefault();
     setIsProcessing(true);
     try {
-      await setDoc(doc(db, 'users', user.uid), profileData, { merge: true });
+      let photoURL = avatarPreview || userData?.photoURL || null;
+
+      // Upload new avatar to Cloudinary if selected
+      if (avatarFile) {
+        setIsUploadingAvatar(true);
+        const signRes = await fetch('/api/upload/sign', { method: 'POST' });
+        const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
+        const formData = new FormData();
+        formData.append('file', avatarFile);
+        formData.append('signature', signature);
+        formData.append('timestamp', timestamp);
+        formData.append('api_key', apiKey);
+        formData.append('folder', folder);
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        photoURL = uploadData.secure_url;
+        setIsUploadingAvatar(false);
+      }
+
+      const skillsArray = profileData.skills
+        ? profileData.skills.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+
+      const updatedData = {
+        name: profileData.name,
+        bio: profileData.bio,
+        website: profileData.website,
+        tiktok: profileData.tiktok,
+        instagram: profileData.instagram,
+        whatsapp: profileData.whatsapp,
+        category: profileData.category,
+        skills: skillsArray,
+        ...(photoURL && { photoURL }),
+      };
+
+      await setDoc(doc(db, 'users', user.uid), updatedData, { merge: true });
+      setUserData(prev => ({ ...prev, ...updatedData }));
+      if (photoURL) setAvatarPreview(photoURL);
+      setAvatarFile(null);
       setIsEditingProfile(false);
-      alert('Profile updated successfully!');
     } catch (err) {
       console.error(err);
-      alert('Failed to update profile');
+      alert('Failed to update profile. Please try again.');
     } finally {
       setIsProcessing(false);
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -1429,16 +1480,51 @@ export default function Dashboard() {
 
       {isEditingProfile && (
         <div className="modal-overlay">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="upload-modal glass-card">
-            <h3>Storefront Settings</h3>
-            <p style={{ opacity: 0.6, fontSize: '0.9rem', marginBottom: '1.5rem' }}>Customize how your public portfolio looks.</p>
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="upload-modal glass-card" style={{ maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3>Edit Public Portfolio Profile</h3>
+            <p style={{ opacity: 0.6, fontSize: '0.9rem', marginBottom: '1.5rem' }}>This is how creators and clients see you on Lipapata.</p>
 
             <form onSubmit={handleSaveProfile}>
+
+              {/* Avatar Upload */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                <div 
+                  onClick={() => avatarInputRef.current?.click()}
+                  style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', border: '3px solid #10b981', flexShrink: 0 }}
+                >
+                  {avatarPreview
+                    ? <img src={avatarPreview} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: '2rem' }}>{(profileData.name || userData?.name || 'C')[0]?.toUpperCase()}</span>
+                  }
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>Profile Photo</p>
+                  <p style={{ margin: '0.25rem 0 0.5rem', opacity: 0.6, fontSize: '0.82rem' }}>Click the circle to upload a photo. Square images work best.</p>
+                  <button type="button" className="btn-secondary" style={{ fontSize: '0.82rem', padding: '0.4rem 0.8rem' }} onClick={() => avatarInputRef.current?.click()}>
+                    {isUploadingAvatar ? 'Uploading...' : 'Change Photo'}
+                  </button>
+                  <input type="file" ref={avatarInputRef} accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                    const f = e.target.files[0];
+                    if (f) { setAvatarFile(f); setAvatarPreview(URL.createObjectURL(f)); }
+                  }} />
+                </div>
+              </div>
+
               <div className="input-group">
-                <label>Bio</label>
-                <textarea 
+                <label>Display Name</label>
+                <input
+                  type="text"
+                  placeholder="Your public name or brand name"
+                  value={profileData.name}
+                  onChange={(e) => setProfileData({...profileData, name: e.target.value})}
+                />
+              </div>
+
+              <div className="input-group">
+                <label>Bio / Tagline</label>
+                <textarea
                   rows="3"
-                  placeholder="Tell your audience about yourself..." 
+                  placeholder="e.g. Nairobi-based graphic designer specializing in brand identity..."
                   value={profileData.bio}
                   onChange={(e) => setProfileData({...profileData, bio: e.target.value})}
                   style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)', background: '#F8FAFC' }}
@@ -1446,39 +1532,62 @@ export default function Dashboard() {
               </div>
 
               <div className="input-group">
-                <label>Website URL</label>
-                <input 
-                  type="url" 
-                  placeholder="https://..." 
-                  value={profileData.website}
-                  onChange={(e) => setProfileData({...profileData, website: e.target.value})}
+                <label>Creative Category</label>
+                <select
+                  value={profileData.category}
+                  onChange={(e) => setProfileData({...profileData, category: e.target.value})}
+                  style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)', background: '#F8FAFC', marginBottom: '1.5rem' }}
+                >
+                  <option value="">Select your main category...</option>
+                  <option value="Graphic Design & Branding">Graphic Design & Branding</option>
+                  <option value="Web & UI/UX Design">Web & UI/UX Design</option>
+                  <option value="App & Web Dev">App & Web Dev</option>
+                  <option value="Architecture & 3D">Architecture & 3D</option>
+                  <option value="Digital Art & Content">Digital Art & Content</option>
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label>Skills (comma-separated)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Logo Design, Branding, Figma, Adobe XD"
+                  value={profileData.skills}
+                  onChange={(e) => setProfileData({...profileData, skills: e.target.value})}
                 />
+                <small style={{ opacity: 0.5, fontSize: '0.78rem' }}>These show as tags on your public profile</small>
+              </div>
+
+              <div className="input-group">
+                <label>WhatsApp Number</label>
+                <input
+                  type="tel"
+                  placeholder="254712345678"
+                  value={profileData.whatsapp}
+                  onChange={(e) => setProfileData({...profileData, whatsapp: e.target.value})}
+                />
+                <small style={{ opacity: 0.5, fontSize: '0.78rem' }}>Clients can click to chat with you directly</small>
+              </div>
+
+              <div className="input-group">
+                <label>Website URL</label>
+                <input type="url" placeholder="https://..." value={profileData.website} onChange={(e) => setProfileData({...profileData, website: e.target.value})} />
               </div>
 
               <div className="input-group">
                 <label>TikTok Profile URL</label>
-                <input 
-                  type="url" 
-                  placeholder="https://tiktok.com/@..." 
-                  value={profileData.tiktok}
-                  onChange={(e) => setProfileData({...profileData, tiktok: e.target.value})}
-                />
+                <input type="url" placeholder="https://tiktok.com/@..." value={profileData.tiktok} onChange={(e) => setProfileData({...profileData, tiktok: e.target.value})} />
               </div>
 
               <div className="input-group">
                 <label>Instagram Profile URL</label>
-                <input 
-                  type="url" 
-                  placeholder="https://instagram.com/..." 
-                  value={profileData.instagram}
-                  onChange={(e) => setProfileData({...profileData, instagram: e.target.value})}
-                />
+                <input type="url" placeholder="https://instagram.com/..." value={profileData.instagram} onChange={(e) => setProfileData({...profileData, instagram: e.target.value})} />
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setIsEditingProfile(false)}>Close</button>
+                <button type="button" className="btn-secondary" onClick={() => setIsEditingProfile(false)}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={isProcessing}>
-                  {isProcessing ? 'Saving...' : 'Save Profile'}
+                  {isProcessing ? (isUploadingAvatar ? 'Uploading photo...' : 'Saving...') : 'Save Profile'}
                 </button>
               </div>
             </form>
